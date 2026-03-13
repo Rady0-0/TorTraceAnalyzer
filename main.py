@@ -1,1 +1,2 @@
-print("TorTraceAnalyzer started")
+print("===== TorTraceAnalyzer =====")
+print("Starting forensic artifact analysis...")
