@@ -36,17 +36,24 @@ def check_system(file):
 
     data = read_file_content(file)
 
-    indicators = [
+    system_indicators = [
         "tor.exe.pf",
         "firefox.exe.pf",
         "prefetch",
-        "tor browser",
-        "last run time"
+        "last run time",
+        "run count",
+        "tor browser"
     ]
 
-    if any(indicator in data for indicator in indicators):
+    detected = []
 
-        return "[System Layer] Tor execution artifacts detected"
+    for indicator in system_indicators:
+        if indicator in data:
+            detected.append(indicator)
+
+    if detected:
+
+        return "[System Layer] Tor execution artifacts detected: " + ", ".join(detected)
 
     else:
 
