@@ -7,6 +7,7 @@ from system_analysis import check_system
 from network_analysis import check_network
 from application_analysis import check_application
 from artifact_correlation import correlate_artifacts
+from risk_scoring import calculate_risk
 
 
 def read_file(file):
@@ -147,6 +148,17 @@ correlation = correlate_artifacts(results)
 
 for c in correlation["correlations"]:
     print("•", c)
+
+
+print("\n========================================")
+print("            RISK ASSESSMENT")
+print("========================================\n")
+
+score, level = calculate_risk(results)
+
+print("TOR ACTIVITY RISK SCORE:", score)
+print("CONFIDENCE LEVEL:", level)
+
 
 print("\n========================================")
 print("           ANALYSIS COMPLETE")
