@@ -1,4 +1,5 @@
 import os
+import sys
 import csv
 import json
 
@@ -7,7 +8,9 @@ from system_analysis import check_system
 from network_analysis import check_network
 from application_analysis import check_application
 from artifact_correlation import correlate_artifacts
+from timeline_reconstruction import build_timeline
 from risk_scoring import calculate_risk
+from report_generator import generate_report
 
 
 def read_file(file):
@@ -43,19 +46,31 @@ print("\n========================================")
 print("      TORTRACEANALYZER INVESTIGATION")
 print("========================================\n")
 
-folder = "input_data"
+
+# -------- INPUT COLLECTION --------
+
+inputs = sys.argv[1:]
+
+files = []
+
+for path in inputs:
+
+    if os.path.isdir(path):
+        for f in os.listdir(path):
+            files.append(os.path.join(path, f))
+
+    elif os.path.isfile(path):
+        files.append(path)
+
+
+# -------- FILE CLASSIFICATION --------
 
 memory_files = []
 system_files = []
 network_files = []
 application_files = []
 
-
-# ---- FILE CLASSIFICATION ----
-
-for file in os.listdir(folder):
-
-    filepath = os.path.join(folder, file)
+for filepath in files:
 
     if os.path.isfile(filepath):
 
@@ -64,7 +79,7 @@ for file in os.listdir(folder):
         if any(x in data for x in ["tor.exe", "firefox.exe", "pid"]):
             memory_files.append(filepath)
 
-        if any(x in data for x in ["tor.exe.pf", "firefox.exe.pf", "prefetch"]):
+        if any(x in data for x in ["prefetch", ".pf", "tor.exe.pf", "firefox.exe.pf"]):
             system_files.append(filepath)
 
         if any(x in data for x in ["tls", "9050", "socks", "relay"]):
@@ -74,6 +89,8 @@ for file in os.listdir(folder):
             application_files.append(filepath)
 
 
+# -------- RESULT FLAGS --------
+
 results = {
     "memory": False,
     "system": False,
@@ -81,6 +98,8 @@ results = {
     "application": False
 }
 
+
+# -------- MEMORY ANALYSIS --------
 
 print("MEMORY ANALYSIS")
 print("--------------------------------")
@@ -107,10 +126,17 @@ else:
 
     print("[Memory Layer] No Tor process detected")
 
+
+# -------- SYSTEM ANALYSIS --------
+
 print("\nSYSTEM ANALYSIS")
 print("--------------------------------")
 
+if not system_files:
+    print("[System Layer] No Tor execution artifacts detected")
+
 for f in system_files:
+
     result = check_system(f)
     print(result)
 
@@ -118,10 +144,16 @@ for f in system_files:
         results["system"] = True
 
 
+# -------- NETWORK ANALYSIS --------
+
 print("\nNETWORK ANALYSIS")
 print("--------------------------------")
 
+if not network_files:
+    print("[Network Layer] No Tor network indicators detected")
+
 for f in network_files:
+
     result = check_network(f)
     print(result)
 
@@ -129,16 +161,24 @@ for f in network_files:
         results["network"] = True
 
 
+# -------- APPLICATION ANALYSIS --------
+
 print("\nAPPLICATION ANALYSIS")
 print("--------------------------------")
 
+if not application_files:
+    print("[Application Layer] No Tor browser artifacts detected")
+
 for f in application_files:
+
     result = check_application(f)
     print(result)
 
     if "detected" in result.lower():
         results["application"] = True
 
+
+# -------- ARTIFACT CORRELATION --------
 
 print("\n========================================")
 print("         ARTIFACT CORRELATION")
@@ -150,6 +190,27 @@ for c in correlation["correlations"]:
     print("•", c)
 
 
+# -------- Timeline Reconstruction --------
+
+print("\n========================================")
+print("         ACTIVITY TIMELINE")
+print("========================================\n")
+
+timeline_data = build_timeline(results)
+
+print("Detected Timeline Events:\n")
+
+for event in timeline_data["timeline"]:
+    print("•", event)
+
+print("\nTimeline Reconstruction:\n")
+
+for step in timeline_data["reconstruction"]:
+    print("•", step)
+
+
+# -------- RISK SCORING --------
+
 print("\n========================================")
 print("            RISK ASSESSMENT")
 print("========================================\n")
@@ -158,6 +219,11 @@ score, level = calculate_risk(results)
 
 print("TOR ACTIVITY RISK SCORE:", score)
 print("CONFIDENCE LEVEL:", level)
+
+
+# -------- REPORT GENERATION --------
+
+generate_report(results, correlation["correlations"], score, level)
 
 
 print("\n========================================")

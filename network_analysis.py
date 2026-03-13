@@ -1,6 +1,7 @@
 import os
 import csv
 import json
+from tor_relay_detection import detect_tor_relay
 
 
 def read_file_content(file):
@@ -54,10 +55,14 @@ def check_network(file):
         if indicator in data:
             detected.append(indicator)
 
-    if detected:
+    # ----- TOR RELAY IP DETECTION -----
+    tor_relays = detect_tor_relay(data)
 
+    if tor_relays:
+        detected.append("tor relay ip: " + ", ".join(tor_relays))
+
+    if detected:
         return "[Network Layer] Tor network indicators detected: " + ", ".join(detected)
 
     else:
-
         return "[Network Layer] No Tor network indicators detected"

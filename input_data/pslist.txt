@@ -1,4 +1,0 @@
-PID     Process
-1024    explorer.exe
-2310    firefox.exe
-2450    tor.exe
