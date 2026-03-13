@@ -36,8 +36,20 @@ def check_memory(file):
 
     data = read_file_content(file)
 
-    if "tor.exe" in data:
-        return "[Memory Layer] Tor process detected"
+    indicators = [
+        "tor.exe",
+        "firefox.exe",
+        "tor browser"
+    ]
+
+    detected = []
+
+    for indicator in indicators:
+        if indicator in data:
+            detected.append(indicator)
+
+    if detected:
+        return "[Memory Layer] Tor process detected: " + ", ".join(detected)
 
     else:
         return "[Memory Layer] No Tor process detected"

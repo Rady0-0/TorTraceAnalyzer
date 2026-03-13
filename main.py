@@ -1,22 +1,56 @@
 import os
+import csv
+import json
 
 from memory_analysis import check_memory
 from system_analysis import check_system
 from network_analysis import check_network
 from application_analysis import check_application
+from artifact_correlation import correlate_artifacts
 
 
-print("===== TorTraceAnalyzer =====")
-print("Scanning forensic input folder...\n")
+def read_file(file):
+
+    ext = os.path.splitext(file)[1].lower()
+
+    try:
+
+        if ext in [".txt", ".log"]:
+            with open(file, "r", errors="ignore") as f:
+                return f.read().lower()
+
+        elif ext == ".csv":
+            data = ""
+            with open(file, newline='', errors="ignore") as f:
+                reader = csv.reader(f)
+                for row in reader:
+                    data += " ".join(row).lower()
+            return data
+
+        elif ext == ".json":
+            with open(file, "r", errors="ignore") as f:
+                return json.dumps(json.load(f)).lower()
+
+        else:
+            return ""
+
+    except:
+        return ""
+
+
+print("\n========================================")
+print("      TORTRACEANALYZER INVESTIGATION")
+print("========================================\n")
 
 folder = "input_data"
 
-# Artifact indicators
-memory_indicators = ["pid", "process", "tor.exe", "firefox.exe"]
-system_indicators = ["prefetch", ".pf", "last run time"]
-network_indicators = ["tls", "tcp", "udp", "relay"]
-application_indicators = ["sqlite", "places.sqlite", "cookies.sqlite", "tor browser"]
+memory_files = []
+system_files = []
+network_files = []
+application_files = []
 
+
+# ---- FILE CLASSIFICATION ----
 
 for file in os.listdir(folder):
 
@@ -24,33 +58,96 @@ for file in os.listdir(folder):
 
     if os.path.isfile(filepath):
 
-        print("Analyzing:", file)
+        data = read_file(filepath)
 
-        try:
-            with open(filepath, "r", errors="ignore") as f:
-                data = f.read().lower()
+        if any(x in data for x in ["tor.exe", "firefox.exe", "pid"]):
+            memory_files.append(filepath)
 
-        except:
-            print("Unable to read file\n")
-            continue
+        if any(x in data for x in ["tor.exe.pf", "firefox.exe.pf", "prefetch"]):
+            system_files.append(filepath)
 
-        # Memory layer detection
-        if any(indicator in data for indicator in memory_indicators):
-            print(check_memory(filepath))
+        if any(x in data for x in ["tls", "9050", "socks", "relay"]):
+            network_files.append(filepath)
 
-        # System layer detection
-        elif any(indicator in data for indicator in system_indicators):
-            print(check_system(filepath))
+        if any(x in data for x in ["places.sqlite", "cookies.sqlite", "tor browser"]):
+            application_files.append(filepath)
 
-        # Network layer detection
-        elif any(indicator in data for indicator in network_indicators):
-            print(check_network(filepath))
 
-        # Application layer detection
-        elif any(indicator in data for indicator in application_indicators):
-            print(check_application(filepath))
+results = {
+    "memory": False,
+    "system": False,
+    "network": False,
+    "application": False
+}
 
-        else:
-            print("No relevant forensic artifacts detected")
 
-        print()
+print("MEMORY ANALYSIS")
+print("--------------------------------")
+
+memory_artifacts = set()
+
+for f in memory_files:
+
+    result = check_memory(f)
+
+    if "detected" in result.lower():
+
+        artifacts = result.split(":")[-1].strip().split(",")
+
+        for a in artifacts:
+            memory_artifacts.add(a.strip())
+
+if memory_artifacts:
+
+    print("[Memory Layer] Tor process detected:", ", ".join(memory_artifacts))
+    results["memory"] = True
+
+else:
+
+    print("[Memory Layer] No Tor process detected")
+
+print("\nSYSTEM ANALYSIS")
+print("--------------------------------")
+
+for f in system_files:
+    result = check_system(f)
+    print(result)
+
+    if "detected" in result.lower():
+        results["system"] = True
+
+
+print("\nNETWORK ANALYSIS")
+print("--------------------------------")
+
+for f in network_files:
+    result = check_network(f)
+    print(result)
+
+    if "detected" in result.lower():
+        results["network"] = True
+
+
+print("\nAPPLICATION ANALYSIS")
+print("--------------------------------")
+
+for f in application_files:
+    result = check_application(f)
+    print(result)
+
+    if "detected" in result.lower():
+        results["application"] = True
+
+
+print("\n========================================")
+print("         ARTIFACT CORRELATION")
+print("========================================\n")
+
+correlation = correlate_artifacts(results)
+
+for c in correlation["correlations"]:
+    print("•", c)
+
+print("\n========================================")
+print("           ANALYSIS COMPLETE")
+print("========================================")
