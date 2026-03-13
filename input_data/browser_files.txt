@@ -1,0 +1,2 @@
+Profile Path: Tor Browser\Browser\TorBrowser\Data\Browser\profile.default
+Database: places.sqlite
