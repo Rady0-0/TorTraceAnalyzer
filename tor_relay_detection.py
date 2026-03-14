@@ -1,29 +1,22 @@
 import re
 
-def load_tor_nodes():
-
-    nodes = set()
-
-    try:
-        with open("tor_nodes.txt", "r") as f:
-            for line in f:
-                nodes.add(line.strip())
-    except:
-        pass
-
-    return nodes
-
-
 def detect_tor_relay(data):
 
-    tor_nodes = load_tor_nodes()
+    # Known Tor relay prefixes (simplified detection)
+    tor_ip_patterns = [
+        "185.220",
+        "51.15",
+        "89.234",
+        "171.25"
+    ]
 
     ips = re.findall(r'\b(?:[0-9]{1,3}\.){3}[0-9]{1,3}\b', data)
 
-    detected = []
+    detected = set()
 
     for ip in ips:
-        if ip in tor_nodes:
-            detected.append(ip)
+        for prefix in tor_ip_patterns:
+            if ip.startswith(prefix):
+                detected.add(ip)
 
-    return detected
+    return list(detected)

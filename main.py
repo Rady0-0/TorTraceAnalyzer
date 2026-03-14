@@ -62,6 +62,11 @@ for path in inputs:
     elif os.path.isfile(path):
         files.append(path)
 
+# -------- SAFETY CHECK --------
+
+if not files:
+    print("No evidence files selected.")
+    sys.exit()
 
 # -------- FILE CLASSIFICATION --------
 

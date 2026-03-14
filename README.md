@@ -20,3 +20,14 @@ TorTraceAnalyzer is a multi-layer darknet forensic investigation tool designed t
 ## Technologies
 
 Python, Digital Forensics Techniques, Artifact Correlation
+
+## Installation
+
+1. Clone the repository
+git clone https://github.com/Rady0-0/TorTraceAnalyzer.git
+
+2. Install dependencies
+pip install -r requirements.txt
+
+3. Run the tool
+python gui.py
