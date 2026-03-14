@@ -25,16 +25,16 @@ Python, Digital Forensics Techniques, Artifact Correlation
 
 1. Clone the repository
 
-git clone https://github.com/Rady0-0/TorTraceAnalyzer.git
+    git clone https://github.com/Rady0-0/TorTraceAnalyzer.git
 
 2. Go to the project folder
 
-cd TorTraceAnalyzer
+    cd TorTraceAnalyzer
 
 3. Install dependencies
 
-pip install -r requirements.txt
+    pip install -r requirements.txt
 
 4. Run the tool
 
-python gui.py
+    python gui.py
