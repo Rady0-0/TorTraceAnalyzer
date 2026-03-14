@@ -5,6 +5,7 @@ import threading
 import os
 import json
 import csv
+import sys
 
 selected_paths = []
 
@@ -252,24 +253,26 @@ def run_analysis():
     status.config(text="STATUS: ANALYZING...",fg="yellow")
 
     def task():
-
         try:
 
-            cmd=["python","main.py"]+selected_paths
+            import subprocess
+            import sys
 
-            result=subprocess.run(cmd,capture_output=True,text=True)
+            cmd = [sys.executable, "main.py"] + selected_paths
+            result = subprocess.run(cmd, capture_output=True, text=True)
 
-            output.delete(1.0,tk.END)
+            result_output = result.stdout
 
-            insert_colored(result.stdout)
+            output.delete(1.0, tk.END)
 
-            generate_summary(result.stdout)
+            insert_colored(result_output)
+
+            generate_summary(result_output)
 
         except Exception as e:
-            output.insert(tk.END,str(e))
+            output.insert(tk.END, str(e))
 
-        status.config(text="STATUS: ANALYSIS COMPLETE",fg="lightgreen")
-
+    status.config(text="STATUS: ANALYSIS COMPLETE", fg="lightgreen")
     threading.Thread(target=task).start()
 
 tk.Button(frame,text="Run Analysis",command=run_analysis,

@@ -12,6 +12,17 @@ from timeline_reconstruction import build_timeline
 from risk_scoring import calculate_risk
 from report_generator import generate_report
 
+def main(inputs):
+
+    files = []
+
+    for path in inputs:
+        if os.path.isdir(path):
+            for f in os.listdir(path):
+                files.append(os.path.join(path, f))
+        elif os.path.isfile(path):
+            files.append(path)
+
 
 def read_file(file):
 
@@ -234,3 +245,7 @@ generate_report(results, correlation["correlations"], score, level)
 print("\n========================================")
 print("           ANALYSIS COMPLETE")
 print("========================================")
+
+if __name__ == "__main__":
+    import sys
+    main(sys.argv[1:])
