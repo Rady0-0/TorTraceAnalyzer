@@ -7,7 +7,7 @@
 
 ## Description
 
-TorTraceAnalyzer is a multi-layer darknet forensic investigation tool designed to detect Tor browser usage and potential insider data exfiltration attempts.
+TorTraceAnalyzer is a multi-layer darknet forensic investigation tool designed to detect Tor browser usage.
 
 ## Features
 
