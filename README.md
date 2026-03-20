@@ -16,6 +16,18 @@
 
 ---
 
+## 📦 Standalone Executable (Windows)
+
+For forensic investigators who require a portable, zero-install solution, a standalone executable is available. This version bundles all dependencies and the engine into a single file.
+
+1.  Navigate to the **[Releases](https://github.com/Rady0-0/TorTraceAnalyzer/releases)** tab.
+2.  Download the latest `TorTraceAnalyzer_v2.exe`.
+3.  Launch the application. No Python installation or environment setup is required.
+
+> **Note:** As this is an unsigned forensic tool, Windows Defender may flag it. You can safely click **"More Info" -> "Run Anyway"** to start the suite.
+
+---
+
 ## 📊 Forensic Methodology
 
 The suite scavenges for "Smoking Gun" artifacts across four critical investigative layers:
