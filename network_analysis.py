@@ -1,68 +1,34 @@
-import os
-import csv
-import json
-from tor_relay_detection import detect_tor_relay
+import re
 
+def extract_internal_metadata(content, default_ts, artifact_name):
+    time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
+    times = re.findall(time_pattern, content)
+    path_pattern = r'([a-zA-Z]:\\[\\\w\s\.\-\(\)]+|/[\w\s\.\-\(\)/]+)'
+    paths = re.findall(path_pattern, content)
+    raw_path = paths[0] if paths else "Path not found"
+    full_path = raw_path
+    if artifact_name.lower() not in raw_path.lower():
+        sep = "/" if "/" in raw_path else "\\"
+        full_path = f"{raw_path.rstrip(sep)}{sep}{artifact_name.lower()}"
+    return {"time": times[0] if times else default_ts.get('modified', 'N/A'), "path": full_path}
 
-def read_file_content(file):
-
-    extension = os.path.splitext(file)[1].lower()
-
-    try:
-
-        if extension in [".txt", ".log"]:
-            with open(file, "r", errors="ignore") as f:
-                return f.read().lower()
-
-        elif extension == ".csv":
-            data = ""
-            with open(file, newline='', errors="ignore") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    data += " ".join(row).lower()
-            return data
-
-        elif extension == ".json":
-            with open(file, "r", errors="ignore") as f:
-                return json.dumps(json.load(f)).lower()
-
-        else:
-            return ""
-
-    except:
-        return ""
-
-
-def check_network(file):
-
-    data = read_file_content(file)
-
-    network_indicators = [
-        "tor",
-        "relay",
-        "onion",
-        "tls",
-        "9050",
-        "9001",
-        "9030",
-        "socks",
-        "directory request"
-    ]
-
-    detected = []
-
-    for indicator in network_indicators:
-        if indicator in data:
-            detected.append(indicator)
-
-    # ----- TOR RELAY IP DETECTION -----
-    tor_relays = detect_tor_relay(data)
-
-    if tor_relays:
-        detected.append("tor relay ip: " + ", ".join(tor_relays))
-
-    if detected:
-        return "[Network Layer] Tor network indicators detected: " + ", ".join(detected)
-
-    else:
-        return "[Network Layer] No Tor network indicators detected"
+def check_network(file_data):
+    content = file_data.get("content", "").lower()
+    ts_metadata = file_data.get("timestamps", {})
+    results = []
+    indicators = {
+        "9050": "Tor SOCKS Port (Default).",
+        "9150": "Tor Browser Bundle Port.",
+        "tap-windows": "VPN Virtual Adapter: Confirms Scenario 2/3 (VPN+Tor).",
+        "tun0": "Active VPN Tunnel interface identified.",
+        "ip change": "Network Log: Detected IP address shift consistent with Tor/VPN."
+    }
+    for key, reason in indicators.items():
+        if key in content:
+            ext = extract_internal_metadata(content, ts_metadata, key.upper())
+            results.append({
+                "layer": "Network", "status": "Detected", "file_name": key.upper(),
+                "file_path": ext["path"], "message": reason,
+                "disk_timestamps": {"modified": ext["time"]}
+            })
+    return results

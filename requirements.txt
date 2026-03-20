@@ -1,1 +1,10 @@
-tk
+# --- GUI & UI Framework ---
+customtkinter==5.2.2
+Pillow==10.2.0
+
+# --- Report Generation (Optional but recommended) ---
+# If your report_generator.py uses PDF libraries, include them here:
+# fpdf2==2.7.8
+
+# --- System Compatibility ---
+darkdetect==0.8.0

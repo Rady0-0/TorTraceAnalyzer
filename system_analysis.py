@@ -1,60 +1,42 @@
-import os
-import csv
-import json
+import re
 
+def extract_internal_metadata(content, default_ts, artifact_name):
+    time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
+    times = re.findall(time_pattern, content)
+    path_pattern = r'([a-zA-Z]:\\[\\\w\s\.\-\(\)]+|/[\w\s\.\-\(\)/]+)'
+    paths = re.findall(path_pattern, content)
+    raw_path = paths[0] if paths else "Path not found"
+    full_path = raw_path
+    if artifact_name.lower() not in raw_path.lower():
+        sep = "/" if "/" in raw_path else "\\"
+        full_path = f"{raw_path.rstrip(sep)}{sep}{artifact_name.lower()}"
+    return {"time": times[0] if times else default_ts.get('modified', 'N/A'), "path": full_path}
 
-def read_file_content(file):
-
-    extension = os.path.splitext(file)[1].lower()
-
-    try:
-
-        if extension in [".txt", ".log"]:
-            with open(file, "r", errors="ignore") as f:
-                return f.read().lower()
-
-        elif extension == ".csv":
-            data = ""
-            with open(file, newline='', errors="ignore") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    data += " ".join(row).lower()
-            return data
-
-        elif extension == ".json":
-            with open(file, "r", errors="ignore") as f:
-                return json.dumps(json.load(f)).lower()
-
-        else:
-            return ""
-
-    except:
-        return ""
-
-
-def check_system(file):
-
-    data = read_file_content(file)
-
-    system_indicators = [
-        "tor.exe.pf",
-        "firefox.exe.pf",
-        "prefetch",
-        "last run time",
-        "run count",
-        "tor browser"
-    ]
-
-    detected = []
-
-    for indicator in system_indicators:
-        if indicator in data:
-            detected.append(indicator)
-
-    if detected:
-
-        return "[System Layer] Tor execution artifacts detected: " + ", ".join(detected)
-
-    else:
-
-        return "[System Layer] No Tor execution artifacts detected"
+def check_system(file_data):
+    content = file_data.get("content", "").lower()
+    ts_metadata = file_data.get("timestamps", {})
+    results = []
+    
+    system_indicators = {
+        ".pf": "Windows Prefetch: Proves application execution history.",
+        "usb": "Removable Media Trace: Artifact located on external storage.",
+        "event id 1102": "Audit Log Wiping: Standard forensic log-clear event detected.",
+        "userassist": "Registry UserAssist: Metadata confirming manual GUI launch.",
+        "rar": "Compression Artifact: Evidence of data packaging activity.",
+        "7z": "Compression Artifact: Evidence of data packaging activity."
+    }
+    
+    for indicator, reason in system_indicators.items():
+        if indicator in content:
+            if indicator == ".pf":
+                match = re.search(r'([\w\.-]*tor[\w\.-]*\.pf)', content)
+                name = match.group(1).upper() if match else "TOR.EXE.PF"
+            else:
+                name = indicator.upper()
+            ext = extract_internal_metadata(content, ts_metadata, name)
+            results.append({
+                "layer": "System", "status": "Detected", "file_name": name,
+                "file_path": ext["path"], "message": reason,
+                "disk_timestamps": {"modified": ext["time"]}
+            })
+    return results

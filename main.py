@@ -1,251 +1,97 @@
-import os
 import sys
-import csv
-import json
+import os
 
+# --- CORE FORENSIC MODULES ---
+from file_parser import parse_forensic_file
 from memory_analysis import check_memory
 from system_analysis import check_system
 from network_analysis import check_network
 from application_analysis import check_application
+
+# --- CORRELATION & REPORTING ---
 from artifact_correlation import correlate_artifacts
 from timeline_reconstruction import build_timeline
-from risk_scoring import calculate_risk
+from risk_scoring import calculate_fci
 from report_generator import generate_report
 
-def main(inputs):
+def main():
+    # 1. EVIDENCE INGESTION
+    # Standard input handling for individual files or entire evidence directories.
+    inputs = sys.argv[1:]
+    if not inputs:
+        print("[!] ERROR: No forensic sources selected for analysis.")
+        return
 
-    files = []
-
+    evidence_files = []
     for path in inputs:
         if os.path.isdir(path):
-            for f in os.listdir(path):
-                files.append(os.path.join(path, f))
+            for root, _, files in os.walk(path):
+                for f in files: evidence_files.append(os.path.join(root, f))
         elif os.path.isfile(path):
-            files.append(path)
-
-
-def read_file(file):
-
-    ext = os.path.splitext(file)[1].lower()
-
-    try:
-
-        if ext in [".txt", ".log"]:
-            with open(file, "r", errors="ignore") as f:
-                return f.read().lower()
-
-        elif ext == ".csv":
-            data = ""
-            with open(file, newline='', errors="ignore") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    data += " ".join(row).lower()
-            return data
-
-        elif ext == ".json":
-            with open(file, "r", errors="ignore") as f:
-                return json.dumps(json.load(f)).lower()
-
-        else:
-            return ""
-
-    except:
-        return ""
-
-
-print("\n========================================")
-print("      TORTRACEANALYZER INVESTIGATION")
-print("========================================\n")
-
-
-# -------- INPUT COLLECTION --------
-
-inputs = sys.argv[1:]
-
-files = []
-
-for path in inputs:
-
-    if os.path.isdir(path):
-        for f in os.listdir(path):
-            files.append(os.path.join(path, f))
-
-    elif os.path.isfile(path):
-        files.append(path)
-
-# -------- SAFETY CHECK --------
-
-if not files:
-    print("No evidence files selected.")
-    sys.exit()
-
-# -------- FILE CLASSIFICATION --------
-
-memory_files = []
-system_files = []
-network_files = []
-application_files = []
-
-for filepath in files:
-
-    if os.path.isfile(filepath):
-
-        data = read_file(filepath)
-
-        if any(x in data for x in ["tor.exe", "firefox.exe", "pid"]):
-            memory_files.append(filepath)
-
-        if any(x in data for x in ["prefetch", ".pf", "tor.exe.pf", "firefox.exe.pf"]):
-            system_files.append(filepath)
-
-        if any(x in data for x in ["tls", "9050", "socks", "relay"]):
-            network_files.append(filepath)
-
-        if any(x in data for x in ["places.sqlite", "cookies.sqlite", "tor browser"]):
-            application_files.append(filepath)
-
-
-# -------- RESULT FLAGS --------
-
-results = {
-    "memory": False,
-    "system": False,
-    "network": False,
-    "application": False
-}
-
-
-# -------- MEMORY ANALYSIS --------
-
-print("MEMORY ANALYSIS")
-print("--------------------------------")
-
-memory_artifacts = set()
-
-for f in memory_files:
-
-    result = check_memory(f)
-
-    if "detected" in result.lower():
-
-        artifacts = result.split(":")[-1].strip().split(",")
-
-        for a in artifacts:
-            memory_artifacts.add(a.strip())
-
-if memory_artifacts:
-
-    print("[Memory Layer] Tor process detected:", ", ".join(memory_artifacts))
-    results["memory"] = True
-
-else:
-
-    print("[Memory Layer] No Tor process detected")
-
-
-# -------- SYSTEM ANALYSIS --------
-
-print("\nSYSTEM ANALYSIS")
-print("--------------------------------")
-
-if not system_files:
-    print("[System Layer] No Tor execution artifacts detected")
-
-for f in system_files:
-
-    result = check_system(f)
-    print(result)
-
-    if "detected" in result.lower():
-        results["system"] = True
-
-
-# -------- NETWORK ANALYSIS --------
-
-print("\nNETWORK ANALYSIS")
-print("--------------------------------")
-
-if not network_files:
-    print("[Network Layer] No Tor network indicators detected")
-
-for f in network_files:
-
-    result = check_network(f)
-    print(result)
-
-    if "detected" in result.lower():
-        results["network"] = True
-
-
-# -------- APPLICATION ANALYSIS --------
-
-print("\nAPPLICATION ANALYSIS")
-print("--------------------------------")
-
-if not application_files:
-    print("[Application Layer] No Tor browser artifacts detected")
-
-for f in application_files:
-
-    result = check_application(f)
-    print(result)
-
-    if "detected" in result.lower():
-        results["application"] = True
-
-
-# -------- ARTIFACT CORRELATION --------
-
-print("\n========================================")
-print("         ARTIFACT CORRELATION")
-print("========================================\n")
-
-correlation = correlate_artifacts(results)
-
-for c in correlation["correlations"]:
-    print("•", c)
-
-
-# -------- Timeline Reconstruction --------
-
-print("\n========================================")
-print("         ACTIVITY TIMELINE")
-print("========================================\n")
-
-timeline_data = build_timeline(results)
-
-print("Detected Timeline Events:\n")
-
-for event in timeline_data["timeline"]:
-    print("•", event)
-
-print("\nTimeline Reconstruction:\n")
-
-for step in timeline_data["reconstruction"]:
-    print("•", step)
-
-
-# -------- RISK SCORING --------
-
-print("\n========================================")
-print("            RISK ASSESSMENT")
-print("========================================\n")
-
-score, level = calculate_risk(results)
-
-print("TOR ACTIVITY RISK SCORE:", score)
-print("CONFIDENCE LEVEL:", level)
-
-
-# -------- REPORT GENERATION --------
-
-generate_report(results, correlation["correlations"], score, level)
-
-
-print("\n========================================")
-print("           ANALYSIS COMPLETE")
-print("========================================")
+            evidence_files.append(path)
+
+    print("="*65)
+    print(f"{'TOR TRACE ANALYZER - MULTI-LAYER FORENSIC SUITE':^65}")
+    print("="*65 + "\n")
+
+    all_detections = []
+    layer_hits = {"memory": False, "system": False, "network": False, "application": False}
+
+    # 2. MULTI-HIT ANALYSIS LOOP
+    # Iterates through every file and every layer to ensure zero-loss detection.
+    for f_path in evidence_files:
+        parsed_data = parse_forensic_file(f_path)
+        
+        layers = [
+            ("MEMORY", check_memory), ("SYSTEM", check_system),
+            ("NETWORK", check_network), ("APPLICATION", check_application)
+        ]
+
+        for name, func in layers:
+            # Each function now returns a LIST of all artifacts found
+            results = func(parsed_data)
+            
+            for result in results:
+                if result.get("status") == "Detected":
+                    all_detections.append(result)
+                    layer_hits[name.lower()] = True
+                    
+                    # SYSTEM ROUTING TAGS (GUI COMPATIBLE)
+                    print(f">>> LAYER: {name.upper()}")
+                    print(f"    STATUS   : DETECTED")
+                    print(f"    ARTIFACT : {result['file_name']}")
+                    print(f"    PATH     : {result['file_path']}")
+                    print(f"    OCCURRED : {result['disk_timestamps'].get('modified', 'N/A')}")
+                    print(f"    NOTE     : {result['message']}")
+                    print(f">>> END_LAYER\n")
+
+    # 3. BEHAVIORAL PATTERN CORRELATION
+    # Identifies complex investigative stories like Exfiltration or Log Wiping.
+    correlation = correlate_artifacts(layer_hits, all_detections)
+    print(">>> LAYER: DASHBOARD")
+    print(f"\n[FORENSIC CORRELATION SUMMARY]:\n{correlation['summary']}\n")
+    print(">>> END_LAYER")
+
+    # 4. CHRONOLOGICAL TIMELINE RECONSTRUCTION
+    # Reconstructs activity based on internal metadata extracted from the reports.
+    timeline = build_timeline(all_detections)
+    print(">>> LAYER: TIMELINE")
+    print(f"{'TIMESTAMP':<22} | {'LAYER':<12} | {'ARTIFACT'}")
+    print("-" * 65)
+    for event in timeline["events"]:
+        print(f" • {event['time']:<20} | {event['layer']:<12} | {event['file']}")
+    print(">>> END_LAYER\n")
+
+    # 5. CONFIDENCE SCORING & FINAL OUTPUT
+    # Mathematically weights findings to determine the likelihood of Tor activity.
+    fci_score, determination = calculate_fci(layer_hits)
+    print(f"\nFORENSIC CONFIDENCE INDEX (FCI): {fci_score:.1f}%")
+    print(f"INVESTIGATIVE DETERMINATION: {determination}")
+
+    # Generate the professional evidence report (PDF/TXT)
+    report_path = generate_report(all_detections, fci_score, determination, layer_hits)
+    print(f"\n[*] Formal Evidence Report generated: {report_path}")
+    print("[!] INVESTIGATION COMPLETE")
 
 if __name__ == "__main__":
-    import sys
-    main(sys.argv[1:])
+    main()

@@ -1,34 +1,27 @@
-def build_timeline(results):
-
-    timeline = []
-
-    if results["memory"]:
-        timeline.append("Tor process execution detected in system memory")
-
-    if results["system"]:
-        timeline.append("System execution artifacts created (Prefetch / NTFS traces)")
-
-    if results["network"]:
-        timeline.append("Tor network communication established (TLS / SOCKS traffic)")
-
-    if results["application"]:
-        timeline.append("Tor browser activity detected (browser artifacts)")
-
-    reconstruction = []
-
-    if results["memory"] and results["system"]:
-        reconstruction.append("Tor execution confirmed by memory and system artifacts")
-
-    if results["memory"] and results["network"]:
-        reconstruction.append("Tor process likely initiated network relay connection")
-
-    if results["network"] and results["application"]:
-        reconstruction.append("Tor browsing activity inferred from network and browser artifacts")
-
-    if len(timeline) >= 3:
-        reconstruction.append("Multi-layer forensic evidence indicates Tor-based activity")
-
-    return {
-        "timeline": timeline,
-        "reconstruction": reconstruction
+def build_timeline(all_detections):
+    """
+    Takes all identified artifacts and reconstructs a chronological 
+    history of the suspect's activity.
+    """
+    # Sort detections by the 'Modified' timestamp
+    # Requirements 1: Focus on Modified time as the primary anchor
+    sorted_events = sorted(
+        all_detections, 
+        key=lambda x: x['disk_timestamps'].get('modified', ''), 
+        reverse=True # Newest events first
+    )
+    
+    timeline_data = {
+        "events": [],
+        "summary": f"Reconstructed {len(sorted_events)} forensic events."
     }
+
+    for det in sorted_events:
+        timeline_data["events"].append({
+            "time": det['disk_timestamps'].get('modified', 'N/A'),
+            "layer": det['layer'],
+            "type": "EXECUTION" if det['layer'] == "Memory" else "TRACE",
+            "file": det['file_name']
+        })
+        
+    return timeline_data

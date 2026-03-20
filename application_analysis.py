@@ -1,60 +1,33 @@
-import os
-import csv
-import json
+import re
 
+def extract_internal_metadata(content, default_ts, artifact_name):
+    time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
+    times = re.findall(time_pattern, content)
+    path_pattern = r'([a-zA-Z]:\\[\\\w\s\.\-\(\)]+|/[\w\s\.\-\(\)/]+)'
+    paths = re.findall(path_pattern, content)
+    raw_path = paths[0] if paths else "Path not found"
+    full_path = raw_path
+    if artifact_name.lower() not in raw_path.lower():
+        sep = "/" if "/" in raw_path else "\\"
+        full_path = f"{raw_path.rstrip(sep)}{sep}{artifact_name.lower()}"
+    return {"time": times[0] if times else default_ts.get('modified', 'N/A'), "path": full_path}
 
-def read_file_content(file):
-
-    extension = os.path.splitext(file)[1].lower()
-
-    try:
-
-        if extension in [".txt", ".log"]:
-            with open(file, "r", errors="ignore") as f:
-                return f.read().lower()
-
-        elif extension == ".csv":
-            data = ""
-            with open(file, newline='', errors="ignore") as f:
-                reader = csv.reader(f)
-                for row in reader:
-                    data += " ".join(row).lower()
-            return data
-
-        elif extension == ".json":
-            with open(file, "r", errors="ignore") as f:
-                return json.dumps(json.load(f)).lower()
-
-        else:
-            return ""
-
-    except:
-        return ""
-
-
-def check_application(file):
-
-    data = read_file_content(file)
-
-    application_indicators = [
-        "tor browser",
-        "places.sqlite",
-        "cookies.sqlite",
-        "webappsstore.sqlite",
-        "profile.default",
-        "torprofile"
-    ]
-
-    detected = []
-
-    for indicator in application_indicators:
-        if indicator in data:
-            detected.append(indicator)
-
-    if detected:
-
-        return "[Application Layer] Tor browser artifacts detected: " + ", ".join(detected)
-
-    else:
-
-        return "[Application Layer] No Tor browser artifacts detected"
+def check_application(file_data):
+    content = file_data.get("content", "").lower()
+    ts_metadata = file_data.get("timestamps", {})
+    results = []
+    app_indicators = {
+        "settings.json": "Tor Browser configuration file.",
+        "places.sqlite": "Browser history/bookmarks database.",
+        "cookies.sqlite": "Browser session cookies.",
+        "noscript": "NoScript extension: Core Tor security component."
+    }
+    for artifact, reason in app_indicators.items():
+        if artifact in content:
+            ext = extract_internal_metadata(content, ts_metadata, artifact)
+            results.append({
+                "layer": "Application", "status": "Detected", "file_name": artifact.upper(),
+                "file_path": ext["path"], "message": reason,
+                "disk_timestamps": {"modified": ext["time"]}
+            })
+    return results
