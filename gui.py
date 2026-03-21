@@ -134,21 +134,43 @@ class TorTraceGUI(ctk.CTk):
         except Exception as e: messagebox.showerror("Error", str(e))
 
     def export_report(self):
-        # Since report_generator now saves to Desktop, we find files there
-        desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
-        files = [f for f in os.listdir(desktop_path) if f.startswith('TorTrace_Forensic_Report')]
+        # --- SMART LOOKUP LOGIC ---
+        # Look in all possible locations for the generated file
+        possible_paths = [
+            os.path.join(os.path.expanduser("~"), "Desktop"),
+            os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop"),
+            os.getcwd()
+        ]
         
-        if not files: 
-            messagebox.showwarning("Not Found", "No report file found on Desktop to export.")
+        latest_report = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                files = [f for f in os.listdir(p) if f.startswith('TorTrace_Forensic_Report')]
+                if files:
+                    # Sort files to find the one with the latest timestamp in the name
+                    files.sort()
+                    latest_report = os.path.join(p, files[-1])
+                    break
+
+        if not latest_report:
+            messagebox.showwarning("Not Found", "No forensic report found in standard locations.")
             return
             
-        latest = os.path.join(desktop_path, sorted(files)[-1])
-        save = filedialog.asksaveasfilename(defaultextension=".txt", initialfile=os.path.basename(latest))
-        if save: 
+        # Standard save dialog
+        save_path = filedialog.asksaveasfilename(
+            defaultextension=".txt", 
+            initialfile=os.path.basename(latest_report),
+            title="Export Final Forensic Report"
+        )
+        
+        if save_path:
             import shutil
-            shutil.copy(latest, save)
-            messagebox.showinfo("Saved", f"Report successfully copied to:\n{save}")
-
+            try:
+                shutil.copy(latest_report, save_path)
+                messagebox.showinfo("Export Successful", f"Report archived to:\n{save_path}")
+            except Exception as e:
+                messagebox.showerror("Export Failed", f"Could not copy file: {e}")
+                
 if __name__ == "__main__":
     # 1. ADMIN CHECK
     if not is_admin():

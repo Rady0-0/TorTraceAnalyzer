@@ -3,19 +3,25 @@ import os
 
 def generate_report(all_detections, fci_score, determination, layer_results):
     """
-    Generates a professional forensic report saved directly to the user's Desktop.
-    Resolves [Errno 13] Permission Denied by using a guaranteed writeable path.
+    Generates a forensic report using Smart Pathing to handle OneDrive or local Desktops.
     """
+    # --- SMART PATH LOGIC ---
+    # Try Standard Desktop first
+    report_dir = os.path.join(os.path.expanduser("~"), "Desktop")
     
-    # --- 1. RESOLVE PERMISSION-SAFE PATH ---
-    # This finds 'C:\Users\<User>\Desktop' automatically
-    desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+    # If standard doesn't exist, try OneDrive Desktop
+    if not os.path.exists(report_dir):
+        report_dir = os.path.join(os.path.expanduser("~"), "OneDrive", "Desktop")
+        
+    # Final fallback: current working directory
+    if not os.path.exists(report_dir):
+        report_dir = os.getcwd()
     
     timestamp_str = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     report_filename = f"TorTrace_Forensic_Report_{timestamp_str}.txt"
     
-    # Create the full absolute path
-    full_report_path = os.path.join(desktop_path, report_filename)
+    # The absolute path we will actually use
+    full_report_path = os.path.join(report_dir, report_filename)
     
     try:
         with open(full_report_path, "w", encoding="utf-8") as r:
@@ -63,17 +69,12 @@ def generate_report(all_detections, fci_score, determination, layer_results):
             r.write(f"{'TIMESTAMP (MODIFIED)':<22} | {'LAYER':<12} | {'ARTIFACT NAME'}\n")
             r.write("-" * 90 + "\n")
             
-            # Chronological sort based on disk modification time
             sorted_timeline = sorted(all_detections, key=lambda x: x['disk_timestamps'].get('modified', ''))
             for entry in sorted_timeline:
                 m_time = entry['disk_timestamps'].get('modified', 'N/A')
                 r.write(f"{m_time:<22} | {entry['layer']:<12} | {entry['file_name']}\n")
 
-        # Return the full path so the GUI can notify the user exactly where it is
         return full_report_path
 
-    except PermissionError:
-        # Emergency fallback if even the Desktop is blocked (rare)
-        return "Permission Denied: Could not save report to Desktop."
     except Exception as e:
         return f"Error: {str(e)}"
