@@ -1,41 +1,51 @@
-def calculate_fci(layer_results):
+def calculate_fci(layer_hits, all_detections):
     """
-    Calculates the Forensic Confidence Index (FCI) using weighted evidence layers.
-    This replaces basic 'Low/High' labels with a professional scoring system.
+    Forensic Confidence Index (FCI) Calculation.
     
-    layer_results: A dictionary like {"memory": True, "network": False, ...}
+    This module uses a weighted model where the score is determined by the 
+    'Probative Value' of each unique artifact found across all layers.
     """
-    # 1. FORENSIC WEIGHTS (Total = 100)
-    # Network and Application are weighted higher because they represent 
-    # specific software footprints and active external communication.
-    weights = {
-        "network": 40,      # Highest weight: Proves active traffic to Tor nodes
-        "application": 30,  # High weight: Proves the Tor Browser was configured
-        "system": 20,       # Medium weight: Proves OS execution (Prefetch/Registry)
-        "memory": 10        # Lower weight: Volatile; confirms a process existed
+    
+    # 1. ARTIFACT CRITICALITY WEIGHTS
+    # These must be a 1:1 match with the 'file_name' strings in analysis modules.
+    critical_artifacts = {
+        ".ONION ADDRESS": 40,      # HIGH: Proves Tor hidden service interaction.
+        "USERASSIST (TOR)": 35,    # HIGH: Proves intentional human launch.
+        "PORT 9150": 30,           # MED-HIGH: Direct evidence of TBB traffic.
+        "PORT 9050": 30,           # MED-HIGH: Direct evidence of Tor SOCKS traffic.
+        "TOR PREFETCH": 25,        # MED: Proves the binary was run on Windows.
+        "SETTINGS.JSON": 25,       # MED: Proves user-modified security levels.
+        "TOR.EXE": 20,             # MED: Direct binary match in memory or disk.
+        "EVENT 1102": 20,          # MED: Evidence of 'Log-Wiping' behavior.
+        "VPN PREFETCH": 15,        # LOW-MED: Supportive evidence of anonymization software.
+        "REMOVABLE STORAGE": 15,   # LOW-MED: Evidence of anti-forensic 'Portable' usage.
+        "WIREGUARD": 10,           # LOW: Technical VPN protocol detection.
+        "VPN/TUNNEL": 10           # LOW: General VPN installation traces.
     }
 
-    earned_points = 0
-    total_possible = sum(weights.values())
+    total_score = 0
+    max_possible_score = 100 
 
-    # 2. CALCULATION LOGIC
-    for layer, weight in weights.items():
-        # We check if the layer found any artifacts (True)
-        if layer_results.get(layer.lower()):
-            earned_points += weight
+    # 2. SCORING LOGIC
+    # We use a set to prevent duplicate points for the same artifact type.
+    detected_names = {d['file_name'].upper() for d in all_detections}
+    
+    for artifact, weight in critical_artifacts.items():
+        if artifact in detected_names:
+            total_score += weight
 
-    # Final Percentage Calculation
-    fci_score = (earned_points / total_possible) * 100
+    # Cap the score at 100% for the dashboard representation.
+    fci_score = min(total_score, max_possible_score)
 
-    # 3. PROFESSIONAL DETERMINATIONS (Requirement 5)
-    # These conclusions are based on standard investigative certainty levels.
-    if fci_score >= 90:
-        conclusion = "CONCLUSIVE: Definitive evidence of active Tor Browser usage."
+    # 3. INVESTIGATIVE DETERMINATIONS
+    # Thresholds are mapped to standard investigative certainty levels.
+    if fci_score >= 85:
+        determination = "CONCLUSIVE: Holistic artifact suite confirms active Tor usage."
     elif fci_score >= 60:
-        conclusion = "PROBABLE: Strong technical indicators suggest Tor activity."
-    elif fci_score >= 30:
-        conclusion = "CAUTIONARY: Isolated traces detected; may indicate presence without recent use."
+        determination = "PROBABLE: Multiple high-integrity signatures suggest Tor activity."
+    elif fci_score >= 35:
+        determination = "CAUTIONARY: Isolated traces suggest presence without definitive proof of use."
     else:
-        conclusion = "INCONCLUSIVE: No significant forensic signatures identified."
+        determination = "INCONCLUSIVE: No significant forensic signatures identified."
 
-    return fci_score, conclusion
+    return fci_score, determination

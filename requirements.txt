@@ -1,10 +1,14 @@
 # --- GUI & UI Framework ---
 customtkinter==5.2.2
 Pillow==10.2.0
-
-# --- Report Generation (Optional but recommended) ---
-# If your report_generator.py uses PDF libraries, include them here:
-# fpdf2==2.7.8
-
-# --- System Compatibility ---
 darkdetect==0.8.0
+
+# --- Forensic Engine & Data Processing ---
+# These are MANDATORY for the Parser and Scorer to work
+pandas==2.1.1
+beautifulsoup4==4.12.2
+python-docx==1.0.1
+
+# --- Professional Reporting ---
+# Required for the multi-sheet Excel export
+openpyxl==3.1.2

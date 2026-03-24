@@ -21,7 +21,7 @@
 For forensic investigators who require a portable, zero-install solution, a standalone executable is available. This version bundles all dependencies and the engine into a single file.
 
 1.  Navigate to the **[Releases](https://github.com/Rady0-0/TorTraceAnalyzer/releases)** tab.
-2.  Download the latest `TorTraceAnalyzer_v2.exe`.
+2.  Download the latest `TorTraceAnalyzer_v3.exe`.
 3.  Launch the application. No Python installation or environment setup is required.
 
 > **Note:** As this is an unsigned forensic tool, Windows Defender may flag it. You can safely click **"More Info" -> "Run Anyway"** to start the suite.
@@ -71,18 +71,25 @@ $$FCI = \left( \frac{\sum (Weight_i \times Detected_i)}{\sum Weight_i} \right) \
 
 ## 📸 Dashboard Preview
 ![Dashboard](screenshot.png) 
-*Version 2.0 featuring high-tech floating panels and multi-layer artifact highlighting.*
+*Version 3.0 featuring more updated GUI interface with faster response.*
 
 ---
 
 ## 📂 Project Structure
 
-* `main.py`: The central forensic engine and correlation logic.
-* `gui.py`: Modern HUD interface for evidence ingestion.
-* `artifact_correlation.py`: The behavioral analysis "brain."
-* `file_parser.py`: Universal evidence ingestion module.
-* `report_generator.py`: Automated evidence documentation.
+* `main.py`: The central forensic engine and logic controller.
 
+* `gui.py`: Modern HUD interface for evidence ingestion.
+
+* `artifact_correlation.py`: The behavioral analysis "brain."
+
+* `timeline_reconstruction.py`: The MACB historical sorting engine.
+
+* `risk_scoring.py`: The weighted FCI calculation module.
+
+* `file_parser.py`: Universal evidence ingestion and HTML stripping module.
+
+* `report_generator.py`: Professional multi-format (Excel/CSV/JSON) exporter.
 ---
 
 ## ⚖️ Disclaimer
