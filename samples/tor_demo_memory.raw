@@ -1,0 +1,4 @@
+volatility foundation memory sample
+pslist shows tor.exe
+netscan output references 127.0.0.1:9050
+.onion lookup string recovered from memory

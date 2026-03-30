@@ -1,0 +1,45 @@
+TorTraceAnalyzer Quick Start
+===========================
+
+What this package contains
+- TorTraceAnalyzer.exe
+- sample_inputs\ demo evidence files
+- this quick-start guide
+
+How to use
+1. Double-click TorTraceAnalyzer.exe
+2. Enter case details when the app opens
+3. Click FILES or FOLDER and choose your evidence
+4. Click RUN ANALYSIS
+5. Review the Dashboard, layer tabs, Timeline, Graph, Pie, and Relations views
+6. Export the report if needed
+
+Supported inputs
+- .txt, .log, .csv
+- .json
+- .xlsx, .xls
+- .docx
+- .html, .htm
+- .raw, .mem, .dmp, .bin
+- .e01
+- .pcap, .pcapng
+- folders containing the above
+
+Useful UI notes
+- From date / To date only filter the TIMELINE tab
+- Timeline Graph shows events over time by forensic layer
+- Event Pie shows event-type distribution
+- Relations shows which layer produced which artifacts
+
+Portable behavior
+- The EXE does not need the source code beside it
+- Cases are stored under the current user's Local AppData folder
+- Temporary graphs/cache files are stored in a safe temp folder
+
+If Windows shows a warning
+- Click More info
+- Click Run anyway
+
+Best practice before real use
+- Test the EXE once with the included sample_inputs folder
+- Then test it with one of your own known-good datasets

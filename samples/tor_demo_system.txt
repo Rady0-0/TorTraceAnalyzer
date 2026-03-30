@@ -1,0 +1,4 @@
+Tor Browser detected in prefetch output
+USB history shows removable storage usage
+places.sqlite path observed under Tor Browser profile
+port 9050 observed in related notes

@@ -1,0 +1,19 @@
+# Core GUI and visuals
+customtkinter==5.2.2
+Pillow==10.2.0
+darkdetect==0.8.0
+matplotlib==3.8.0
+networkx==3.5
+
+# Parsing and analysis
+pandas==2.1.1
+beautifulsoup4==4.12.2
+python-docx==1.0.1
+scapy==2.6.1
+
+# Reporting
+openpyxl==3.1.2
+reportlab==3.7.0
+
+# Build / release tooling
+PyInstaller==6.19.0
