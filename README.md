@@ -58,7 +58,7 @@ Each detection is normalized into the same structure:
 ## GUI overview
 
 - `DASHBOARD`: Overall summary, FCI, correlation, detected artifacts, engine messages.
-- `MEMORY`, `SYSTEM`, `NETWORK`, `APPLICATION`, `TRANSPORT`: Layer-specific findings.
+- `MEMORY`, `SYSTEM`, `NETWORK`, `APPLICATION`, `TRANSPORT`: Layer-specific findings shown in compact evidence tables with a details pane.
 - `TIMELINE`: Reconstructed artifact timeline shown as a compact evidence table with row details.
 - `Activity Matrix`: Shows timeline-relevant event counts by layer and event type.
 - `Evidence Pie`: Shows the distribution of detections by forensic layer.
@@ -71,6 +71,7 @@ Each detection is normalized into the same structure:
 - The timeline is intentionally built from `System` and `Application` artifact timestamps only.
 - `Created` and `Accessed` appear only when the tool can extract artifact-level timestamps from the evidence itself. It does not use the uploaded report file timestamp as a substitute.
 - `Network`, `Transport`, and `Memory` detections do not drive the timeline because uploaded report-file times can be misleading.
+- Selecting a row in any forensic layer tab shows the artifact path, evidence match, message, and timestamps in a dedicated details panel.
 - Selecting a timeline row shows the corresponding artifact path, evidence match, and timestamp bundle.
 - `Evidence Pie` is based on the number of detections per layer in the current case.
 - `Activity Matrix` summarizes how many `Modified`, `Created`, and `Accessed` events were reconstructed per layer.

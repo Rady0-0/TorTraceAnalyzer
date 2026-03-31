@@ -95,6 +95,10 @@ class TorTraceGUI(ctk.CTk):
         self.layer_data = {"memory": [], "system": [], "network": [], "application": [], "transport": []}
         self.latest_layer_results = {layer: [] for layer in self.layer_data}
         self.latest_evidence_files = []
+        self.layer_tables = {}
+        self.layer_detail_boxes = {}
+        self.layer_summary_vars = {}
+        self.table_style_configured = False
 
         self.logo_image_large = self._load_logo((92, 92))
         self.logo_image_small = self._load_logo((54, 54))
@@ -204,12 +208,27 @@ class TorTraceGUI(ctk.CTk):
         self.tabs = {}
         self.tabview = ctk.CTkTabview(left_panel)
         self.tabview.pack(fill="both", expand=True, padx=12, pady=12)
-        for name in ["dashboard", "memory", "system", "network", "application", "transport"]:
+        dashboard_tab = self.tabview.add("DASHBOARD")
+        dashboard_text = tk.Text(
+            dashboard_tab,
+            bg="#0f172a",
+            fg="#e2e8f0",
+            insertbackground="white",
+            font=("Consolas", 11),
+            wrap="word",
+            relief="flat",
+            borderwidth=0,
+            padx=10,
+            pady=10,
+        )
+        dashboard_text.pack(fill="both", expand=True)
+        dashboard_text.bind("<Button-1>", self.on_artifact_click)
+        self.tabs["dashboard"] = dashboard_text
+
+        self._configure_treeview_styles()
+        for name in ["memory", "system", "network", "application", "transport"]:
             tab = self.tabview.add(name.upper())
-            text_widget = tk.Text(tab, bg="#0f172a", fg="#e2e8f0", insertbackground="white", font=("Consolas", 11), wrap="word", relief="flat", borderwidth=0, padx=10, pady=10)
-            text_widget.pack(fill="both", expand=True)
-            text_widget.bind("<Button-1>", self.on_artifact_click)
-            self.tabs[name] = text_widget
+            self._build_layer_tab(tab, name)
         for tab in self.tabs.values():
             tab.tag_config("critical", foreground="#ff6b6b", font=("Consolas", 11, "bold"))
             tab.tag_config("high", foreground="#ffb84d")
@@ -242,24 +261,11 @@ class TorTraceGUI(ctk.CTk):
         self.side_workspace.set("VISUALS")
         self._show_visual_placeholder("Run analysis and choose a visual.")
 
-    def _build_timeline_tab(self, timeline_tab):
-        timeline_shell = ctk.CTkFrame(timeline_tab, fg_color="transparent")
-        timeline_shell.pack(fill="both", expand=True, padx=10, pady=10)
+    def _configure_treeview_styles(self):
+        if self.table_style_configured:
+            return
 
-        timeline_header = ctk.CTkFrame(timeline_shell, fg_color="transparent")
-        timeline_header.pack(fill="x", pady=(0, 8))
-        ctk.CTkLabel(
-            timeline_header,
-            text="Timeline Evidence Table",
-            font=ctk.CTkFont(size=16, weight="bold"),
-        ).pack(anchor="w")
-        ctk.CTkLabel(
-            timeline_header,
-            textvariable=self.timeline_summary,
-            text_color="#9fb2c3",
-            justify="left",
-        ).pack(anchor="w", pady=(4, 0))
-
+        self.table_style_configured = True
         self.timeline_style = ttk.Style()
         try:
             self.timeline_style.theme_use("clam")
@@ -287,6 +293,93 @@ class TorTraceGUI(ctk.CTk):
             background=[("selected", "#1d4ed8")],
             foreground=[("selected", "#f8fafc")],
         )
+
+    def _build_layer_tab(self, layer_tab, layer_key):
+        shell = ctk.CTkFrame(layer_tab, fg_color="transparent")
+        shell.pack(fill="both", expand=True, padx=10, pady=10)
+
+        header = ctk.CTkFrame(shell, fg_color="transparent")
+        header.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            header,
+            text=f"{layer_key.title()} Evidence Table",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w")
+        summary_var = tk.StringVar(value=f"No {layer_key} detections loaded.")
+        self.layer_summary_vars[layer_key] = summary_var
+        ctk.CTkLabel(
+            header,
+            textvariable=summary_var,
+            text_color="#9fb2c3",
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+        table_shell = ctk.CTkFrame(shell, corner_radius=12)
+        table_shell.pack(fill="both", expand=True)
+
+        table = ttk.Treeview(
+            table_shell,
+            style="TorTrace.Treeview",
+            columns=("artifact", "status", "evidence", "path"),
+            show="headings",
+            selectmode="browse",
+        )
+        table.heading("artifact", text="Artifact")
+        table.heading("status", text="Status")
+        table.heading("evidence", text="Evidence")
+        table.heading("path", text="Path")
+        table.column("artifact", width=230, anchor="w")
+        table.column("status", width=100, anchor="center")
+        table.column("evidence", width=220, anchor="w")
+        table.column("path", width=520, anchor="w")
+
+        scroll_y = ttk.Scrollbar(table_shell, orient="vertical", command=table.yview)
+        scroll_x = ttk.Scrollbar(table_shell, orient="horizontal", command=table.xview)
+        table.configure(yscrollcommand=scroll_y.set, xscrollcommand=scroll_x.set)
+
+        table.grid(row=0, column=0, sticky="nsew")
+        scroll_y.grid(row=0, column=1, sticky="ns")
+        scroll_x.grid(row=1, column=0, sticky="ew")
+        table_shell.grid_rowconfigure(0, weight=1)
+        table_shell.grid_columnconfigure(0, weight=1)
+
+        table.tag_configure("detected", foreground="#40e0a0")
+        table.tag_configure("suspicious", foreground="#ffb84d")
+        table.tag_configure("critical", foreground="#ff6b6b")
+        table.bind("<<TreeviewSelect>>", lambda _event, layer=layer_key: self._on_layer_select(layer))
+
+        details_shell = ctk.CTkFrame(shell, corner_radius=12)
+        details_shell.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(
+            details_shell,
+            text="Selected Artifact Details",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=12, pady=(10, 6))
+        detail_box = ctk.CTkTextbox(details_shell, height=140)
+        detail_box.pack(fill="x", padx=12, pady=(0, 12))
+        detail_box.insert("1.0", "Select a row to inspect the full detection details.")
+        detail_box.configure(state="disabled")
+
+        self.layer_tables[layer_key] = table
+        self.layer_detail_boxes[layer_key] = detail_box
+
+    def _build_timeline_tab(self, timeline_tab):
+        timeline_shell = ctk.CTkFrame(timeline_tab, fg_color="transparent")
+        timeline_shell.pack(fill="both", expand=True, padx=10, pady=10)
+
+        timeline_header = ctk.CTkFrame(timeline_shell, fg_color="transparent")
+        timeline_header.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            timeline_header,
+            text="Timeline Evidence Table",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            timeline_header,
+            textvariable=self.timeline_summary,
+            text_color="#9fb2c3",
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
 
         table_shell = ctk.CTkFrame(timeline_shell, corner_radius=12)
         table_shell.pack(fill="both", expand=True)
@@ -347,6 +440,95 @@ class TorTraceGUI(ctk.CTk):
         self.timeline_summary.set(message)
         if hasattr(self, "timeline_detail_box"):
             self._set_timeline_detail("Select a timeline row to inspect its artifact details.")
+
+    def _set_layer_detail(self, layer_key, text):
+        detail_box = self.layer_detail_boxes.get(layer_key)
+        if detail_box is None:
+            return
+        detail_box.configure(state="normal")
+        detail_box.delete("1.0", tk.END)
+        detail_box.insert("1.0", text)
+        detail_box.configure(state="disabled")
+
+    def _clear_layer_tables(self):
+        for layer, table in self.layer_tables.items():
+            for item_id in table.get_children():
+                table.delete(item_id)
+            if layer in self.layer_summary_vars:
+                self.layer_summary_vars[layer].set(f"No {layer} detections loaded.")
+            self._set_layer_detail(layer, "Select a row to inspect the full detection details.")
+
+    def _layer_row_tag(self, detection):
+        status = str(detection.get("status", "")).lower()
+        if status == "suspicious":
+            return "suspicious"
+        if "critical" in str(detection.get("message", "")).lower():
+            return "critical"
+        return "detected"
+
+    def _layer_row_values(self, detection):
+        return (
+            detection.get("file_name", "UNKNOWN"),
+            detection.get("status", "Detected"),
+            detection.get("evidence_match", "N/A"),
+            detection.get("file_path", "N/A"),
+        )
+
+    def _layer_search_text(self, detection):
+        timestamps = detection.get("disk_timestamps", {})
+        parts = [
+            detection.get("file_name", ""),
+            detection.get("status", ""),
+            detection.get("evidence_match", ""),
+            detection.get("file_path", ""),
+            detection.get("message", ""),
+            timestamps.get("modified", ""),
+            timestamps.get("created", ""),
+            timestamps.get("accessed", ""),
+        ]
+        return " ".join(str(part) for part in parts if part)
+
+    def _find_layer_detection(self, layer_key, keyword):
+        query = str(keyword).strip().lower()
+        if not query:
+            return None
+        for entry in self.layer_data.get(layer_key, []):
+            haystack = entry.get("search_text", "").lower()
+            artifact = str(entry.get("detection", {}).get("file_name", "")).lower()
+            if query in haystack or haystack in query or query in artifact or artifact in query:
+                return entry
+        return None
+
+    def _on_layer_select(self, layer_key):
+        table = self.layer_tables.get(layer_key)
+        if table is None:
+            return
+        selection = table.selection()
+        if not selection:
+            return
+        item_id = selection[0]
+        detection = None
+        for entry in self.layer_data.get(layer_key, []):
+            if entry.get("item_id") == item_id:
+                detection = entry.get("detection")
+                break
+        if not detection:
+            self._set_layer_detail(layer_key, "Select a row to inspect the full detection details.")
+            return
+
+        timestamps = detection.get("disk_timestamps", {})
+        lines = [
+            f"Artifact : {detection.get('file_name', 'UNKNOWN')}",
+            f"Status   : {detection.get('status', 'Detected')}",
+            f"Layer    : {detection.get('layer', layer_key.title())}",
+            f"Path     : {detection.get('file_path', 'N/A')}",
+            f"Evidence : {detection.get('evidence_match', 'N/A')}",
+            f"Message  : {detection.get('message', 'N/A')}",
+            f"Modified : {timestamps.get('modified', 'N/A')}",
+            f"Created  : {timestamps.get('created', 'N/A')}",
+            f"Accessed : {timestamps.get('accessed', 'N/A')}",
+        ]
+        self._set_layer_detail(layer_key, "\n".join(lines))
 
     def _timeline_row_tag(self, event_type):
         return {
@@ -920,6 +1102,7 @@ class TorTraceGUI(ctk.CTk):
             self.layer_data[key] = []
         for tab in self.tabs.values():
             tab.delete("1.0", tk.END)
+        self._clear_layer_tables()
         self._clear_timeline_table()
 
         self.tabview.set("DASHBOARD")
@@ -1150,18 +1333,42 @@ class TorTraceGUI(ctk.CTk):
 
     def render_layers(self, layer_results):
         for layer in ["memory", "system", "network", "application", "transport"]:
-            tab = self.tabs[layer]
-            tab.delete("1.0", tk.END)
-            lines = []
-            for detection in layer_results.get(layer, []):
-                block = self.format_detection_block(detection)
-                lines.extend(block)
-                for line, tag in block:
-                    tab.insert(tk.END, line + "\n", tag)
-            if not lines:
-                tab.insert(tk.END, "No detections in this layer.\n", "normal")
-            self.layer_data[layer] = [line for line, _tag in lines]
-            tab.see(tk.END)
+            table = self.layer_tables.get(layer)
+            if table is None:
+                continue
+
+            for item_id in table.get_children():
+                table.delete(item_id)
+
+            entries = []
+            detections = list(layer_results.get(layer, []))
+            for detection in detections:
+                values = self._layer_row_values(detection)
+                item_id = table.insert("", "end", values=values, tags=(self._layer_row_tag(detection),))
+                entries.append(
+                    {
+                        "item_id": item_id,
+                        "search_text": self._layer_search_text(detection),
+                        "detection": detection,
+                    }
+                )
+
+            self.layer_data[layer] = entries
+            count = len(entries)
+            if layer in self.layer_summary_vars:
+                if count == 0:
+                    self.layer_summary_vars[layer].set(f"No {layer} detections in this case.")
+                else:
+                    self.layer_summary_vars[layer].set(f"{count} detection{'s' if count != 1 else ''} loaded.")
+
+            if entries:
+                first_item = entries[0]["item_id"]
+                table.selection_set(first_item)
+                table.focus(first_item)
+                table.see(first_item)
+                self._on_layer_select(layer)
+            else:
+                self._set_layer_detail(layer, f"No {layer} detections are available for the current case.")
 
     def format_detection_block(self, detection):
         timestamps = detection.get("disk_timestamps", {})
@@ -1216,23 +1423,33 @@ class TorTraceGUI(ctk.CTk):
         line = widget.get(f"{index} linestart", f"{index} lineend").strip()
         if not line:
             return
-        for layer, lines in self.layer_data.items():
-            if any(line in stored_line for stored_line in lines):
-                self.jump_to_layer(layer, line)
+
+        if line.startswith("[") and "]" in line:
+            layer_name = line[1: line.index("]")].strip().lower()
+            artifact_hint = line.split("]", 1)[1].split("|", 1)[0].strip()
+            if artifact_hint:
+                self.jump_to_layer(layer_name, artifact_hint)
                 return
 
+        for layer, entries in self.layer_data.items():
+            for entry in entries:
+                if line.lower() in entry.get("search_text", "").lower():
+                    self.jump_to_layer(layer, line)
+                    return
+
     def jump_to_layer(self, layer, keyword):
-        if layer not in self.tabs:
+        if layer not in self.layer_tables:
             return
         self.tabview.set(layer.upper())
-        tab = self.tabs[layer]
-        tab.tag_remove("highlight", "1.0", tk.END)
-        idx = tab.search(keyword, "1.0", nocase=1, stopindex=tk.END)
-        if idx:
-            end = f"{idx}+{len(keyword)}c"
-            tab.tag_add("highlight", idx, end)
-            tab.tag_config("highlight", background="#feca57", foreground="#111827")
-            tab.see(idx)
+        entry = self._find_layer_detection(layer, keyword)
+        if not entry:
+            return
+        table = self.layer_tables[layer]
+        item_id = entry["item_id"]
+        table.selection_set(item_id)
+        table.focus(item_id)
+        table.see(item_id)
+        self._on_layer_select(layer)
 
     def search_text(self):
         keyword = self.search_var.get().strip()
@@ -1249,6 +1466,18 @@ class TorTraceGUI(ctk.CTk):
                 tab.tag_add("highlight", idx, end)
                 tab.tag_config("highlight", background="#feca57", foreground="#111827")
                 idx = end
+
+        if keyword:
+            for layer in ["memory", "system", "network", "application", "transport"]:
+                entry = self._find_layer_detection(layer, keyword)
+                if entry:
+                    self.tabview.set(layer.upper())
+                    table = self.layer_tables[layer]
+                    table.selection_set(entry["item_id"])
+                    table.focus(entry["item_id"])
+                    table.see(entry["item_id"])
+                    self._on_layer_select(layer)
+                    break
 
         if hasattr(self, "timeline_table"):
             for item_id in self.timeline_table.selection():
