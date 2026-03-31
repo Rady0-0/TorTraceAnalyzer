@@ -126,8 +126,11 @@ def analyze_pcap_transport(file_path):
             results.append(
                 _detection(
                     file_name=file_name,
-                    message=f"{direction} {protocol} traffic ({data['packets']} packets)",
-                    evidence_match=f"Bytes: {data['bytes']}",
+                    message=(
+                        f"{direction} {protocol} traffic ({data['packets']} packets) "
+                        f"via source port {sport} to destination port {dport}."
+                    ),
+                    evidence_match=f"Ports: {sport} -> {dport} | Bytes: {data['bytes']}",
                     file_path=flow_path,
                     timestamps=timestamps,
                 )
@@ -138,7 +141,7 @@ def analyze_pcap_transport(file_path):
             _detection(
                 file_name="TOR COMMUNICATION CONFIRMED",
                 message="Direct Tor ports observed in packet capture.",
-                evidence_match=f"Tor flows: {tor_flows}",
+                evidence_match=f"Tor flows: {tor_flows} | Known Tor ports: 9001, 9030, 9050, 9150",
                 file_path=os.path.basename(file_path),
                 timestamps=timestamps,
             )

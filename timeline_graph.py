@@ -1,79 +1,102 @@
-import matplotlib.pyplot as plt
-plt.style.use("dark_background")
 from datetime import datetime
 
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.lines import Line2D
 
-def _build_timeline_figure(timeline_data):
+plt.style.use("dark_background")
+
+
+EVENT_COLORS = {
+    "ANOMALY": "#ff6b6b",
+    "MODIFIED": "#00d2d3",
+    "CREATED": "#20bf6b",
+    "ACCESSED": "#feca57",
+}
+
+
+def _parse_event_time(raw_value):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(raw_value, fmt)
+        except (TypeError, ValueError):
+            continue
+    return None
+
+
+def build_timeline_figure(timeline_data):
     events = timeline_data.get("events", [])
-
     if not events:
         return None
 
     parsed = []
-    for e in events:
-        try:
-            t = datetime.strptime(e["time"], "%Y-%m-%d %H:%M:%S")
-            parsed.append({
-                "time": t,
-                "layer": e.get("layer", "Unknown"),
-                "artifact": e.get("artifact", "Unknown"),
-                "type": e.get("type", "")
-            })
-        except:
+    for event in events:
+        event_time = _parse_event_time(event.get("time"))
+        if not event_time:
             continue
+        parsed.append(
+            {
+                "time": event_time,
+                "layer": event.get("layer", "Unknown"),
+                "artifact": event.get("artifact", "Unknown"),
+                "type": event.get("type", ""),
+            }
+        )
 
     if not parsed:
         return None
 
-    parsed.sort(key=lambda x: x["time"])
+    parsed.sort(key=lambda item: item["time"])
+    layers = sorted({event["layer"] for event in parsed})
+    layer_positions = {layer: index for index, layer in enumerate(layers)}
 
-    layers = sorted(set(e["layer"] for e in parsed))
-    layer_y = {layer: i for i, layer in enumerate(layers)}
+    figure, axis = plt.subplots(figsize=(10, 5.5))
+    figure.patch.set_facecolor("#111827")
+    axis.set_facecolor("#111827")
 
-    def get_color(t):
-        return {
-            "ANOMALY": "red",
-            "MODIFIED": "cyan",
-            "CREATED": "green",
-            "ACCESSED": "yellow"
-        }.get(t, "white")
+    for event in parsed:
+        color = EVENT_COLORS.get(event["type"], "white")
+        axis.scatter(event["time"], layer_positions[event["layer"]], c=color, s=65, edgecolors="none")
 
-    fig, ax = plt.subplots(figsize=(10, 4))
+    axis.set_yticks(list(layer_positions.values()))
+    axis.set_yticklabels(list(layer_positions.keys()))
+    axis.set_xlabel("Time")
+    axis.set_title("Forensic Timeline (MACB)")
+    axis.grid(True, linestyle="--", linewidth=0.4, alpha=0.35)
 
-    for e in parsed:
-        ax.scatter(e["time"], layer_y[e["layer"]], c=get_color(e["type"]), s=60)
-
-    ax.set_yticks(list(layer_y.values()))
-    ax.set_yticklabels(list(layer_y.keys()))
-    ax.set_xlabel("Time")
-    ax.set_title("Forensic Timeline (MACB)")
-    ax.grid(True)
-
-    return fig
+    legend_handles = [
+        Line2D([0], [0], marker="o", color="none", markerfacecolor=color, markersize=8, label=label.title())
+        for label, color in EVENT_COLORS.items()
+    ]
+    axis.legend(handles=legend_handles, loc="upper right", frameon=False)
+    figure.tight_layout()
+    return figure
 
 
 def plot_timeline_embedded(timeline_data, frame):
-    fig = _build_timeline_figure(timeline_data)
-    if fig is None:
-        return
-
-    from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+    figure = build_timeline_figure(timeline_data)
+    if figure is None:
+        return None
 
     for widget in frame.winfo_children():
         widget.destroy()
 
-    canvas = FigureCanvasTkAgg(fig, master=frame)
+    canvas = FigureCanvasTkAgg(figure, master=frame)
     canvas.draw()
     canvas.get_tk_widget().pack(fill="both", expand=True)
+    return canvas
 
 
 def plot_timeline(timeline_data, save_path=None):
-    fig = _build_timeline_figure(timeline_data)
-    if fig is None:
-        return
+    figure = build_timeline_figure(timeline_data)
+    if figure is None:
+        return None
 
     if save_path:
-        fig.savefig(save_path, dpi=300, bbox_inches='tight')
-    else:
-        plt.show()
-    plt.close(fig)
+        figure.savefig(save_path, dpi=300, bbox_inches="tight")
+        plt.close(figure)
+        return save_path
+
+    plt.show()
+    plt.close(figure)
+    return None

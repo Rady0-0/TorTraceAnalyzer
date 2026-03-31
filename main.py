@@ -173,7 +173,7 @@ def _print_console_result(result):
     print("INVESTIGATION COMPLETE")
 
 
-def run_analysis(inputs, event_callback=None):
+def run_analysis(inputs, event_callback=None, case_info=None):
     result = _empty_result()
 
     if not inputs:
@@ -276,6 +276,7 @@ def run_analysis(inputs, event_callback=None):
             determination,
             correlation.get("summary", ""),
             timeline,
+            case_info=case_info,
         )
         result["report_path"] = report_path
     except Exception as exc:

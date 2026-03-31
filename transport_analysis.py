@@ -44,6 +44,22 @@ def extract_valid_ips(content):
     return list(set(valid_ips))
 
 
+def extract_candidate_ports(content):
+    raw_ports = set()
+
+    for match in re.findall(r"\bport\s*[:=]?\s*(\d{2,5})\b", content, flags=re.IGNORECASE):
+        raw_ports.add(int(match))
+
+    for match in re.findall(r"\b(?:dport|sport)\s*[:=]?\s*(\d{2,5})\b", content, flags=re.IGNORECASE):
+        raw_ports.add(int(match))
+
+    for match in re.findall(r":(\d{2,5})(?!\d)", content):
+        raw_ports.add(int(match))
+
+    ports = [str(port) for port in sorted(raw_ports) if 1 <= port <= 65535]
+    return ports[:8]
+
+
 # ============================================
 # 🔥 3. DETECT IF CONTENT IS JUST REPORT TEXT
 # ============================================
@@ -71,9 +87,11 @@ def analyze_transport(file_data):
         return results  # DO NOT ANALYZE REPORT TEXT
 
     valid_ips = extract_valid_ips(content)
+    detected_ports = extract_candidate_ports(content)
 
     tcp_count = len(re.findall(r'\btcp\b', content))
     tls_count = len(re.findall(r'\btls\b', content)) + len(re.findall(r':443', content))
+    port_summary = ", ".join(detected_ports) if detected_ports else "None detected"
 
     # ============================================
     # 🔥 STRICT CONDITIONS (ALL MUST PASS)
@@ -89,9 +107,9 @@ def analyze_transport(file_data):
             "layer": "Transport",
             "status": "Detected",
             "file_name": "TCP DATA FLOW",
-            "file_path": f"Transport Layer [{len(valid_ips)} IPs]",
-            "message": "High-volume TCP connections indicate real data transmission.",
-            "evidence_match": f"TCP count: {tcp_count}",
+            "file_path": f"Transport Layer [{len(valid_ips)} IPs | Ports: {port_summary}]",
+            "message": f"High-volume TCP connections indicate real data transmission via ports {port_summary}.",
+            "evidence_match": f"TCP count: {tcp_count} | Ports: {port_summary}",
             "disk_timestamps": ts_metadata
         })
 
@@ -103,9 +121,9 @@ def analyze_transport(file_data):
             "layer": "Transport",
             "status": "Detected",
             "file_name": "ENCRYPTED TRANSPORT",
-            "file_path": "TLS/HTTPS Channel",
-            "message": "Sustained encrypted transport detected.",
-            "evidence_match": f"TLS count: {tls_count}",
+            "file_path": f"TLS/HTTPS Channel [Ports: {port_summary}]",
+            "message": f"Sustained encrypted transport detected across ports {port_summary}.",
+            "evidence_match": f"TLS count: {tls_count} | Ports: {port_summary}",
             "disk_timestamps": ts_metadata
         })
 
@@ -134,9 +152,9 @@ def analyze_transport(file_data):
             "layer": "Transport",
             "status": "Suspicious",
             "file_name": "POSSIBLE DATA TRANSPORT",
-            "file_path": f"Multiple External Nodes [{len(valid_ips)} IPs]",
-            "message": "Pattern suggests actual data movement across network.",
-            "evidence_match": f"IPs: {valid_ips[:5]}",
+            "file_path": f"Multiple External Nodes [{len(valid_ips)} IPs | Ports: {port_summary}]",
+            "message": f"Pattern suggests actual data movement across network using ports {port_summary}.",
+            "evidence_match": f"IPs: {valid_ips[:5]} | Ports: {port_summary}",
             "disk_timestamps": ts_metadata
         })
 

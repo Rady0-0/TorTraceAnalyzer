@@ -3,6 +3,13 @@ $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 Set-Location $root
 
+Write-Host "Stopping running TorTraceAnalyzer processes..."
+$running = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.ProcessName -like "TorTraceAnalyzer*" }
+if ($running) {
+    $running | Stop-Process -Force
+    Start-Sleep -Milliseconds 500
+}
+
 Write-Host "Cleaning previous build output..."
 if (Test-Path "build") { Remove-Item -Recurse -Force "build" }
 if (Test-Path "dist") { Remove-Item -Recurse -Force "dist" }
