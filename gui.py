@@ -59,6 +59,7 @@ class TorTraceGUI(ctk.CTk):
         self.case_info = self._default_case_info()
         self.analysis_process = None
         self.mp_context = mp.get_context("spawn")
+        self.analysis_aborted = False
         self.current_figure = None
         self.graph_canvas = None
         self.correlation_items = []
@@ -164,7 +165,17 @@ class TorTraceGUI(ctk.CTk):
         self.folder_button = ctk.CTkButton(action_frame, text="Folder", command=self.add_folder, width=110)
         self.folder_button.pack(side="left", padx=(0, 8), pady=10)
         self.run_button = ctk.CTkButton(action_frame, text="Run Analysis", command=self.start_analysis, width=140, fg_color="#1f8b4c", hover_color="#176d3c")
-        self.run_button.pack(side="left", padx=(0, 12), pady=10)
+        self.run_button.pack(side="left", padx=(0, 8), pady=10)
+        self.abort_button = ctk.CTkButton(
+            action_frame,
+            text="Abort",
+            command=self.abort_analysis,
+            width=110,
+            fg_color="#b33939",
+            hover_color="#8c2c2c",
+            state="disabled",
+        )
+        self.abort_button.pack(side="left", padx=(0, 12), pady=10)
 
         status_card = ctk.CTkFrame(self, corner_radius=16)
         status_card.pack(fill="x", padx=18, pady=(0, 8))
@@ -221,6 +232,15 @@ class TorTraceGUI(ctk.CTk):
         self.notes_box.insert("1.0", "Investigator notes and conclusions...")
         self.side_workspace.set("VISUALS")
         self._show_visual_placeholder("Run analysis and choose a visual.")
+
+    def _cancel_after_callback(self, attr_name):
+        after_id = getattr(self, attr_name, None)
+        if after_id:
+            try:
+                self.after_cancel(after_id)
+            except Exception:
+                pass
+        setattr(self, attr_name, None)
 
     def _build_control_frames(self):
         self.search_var = tk.StringVar()
@@ -513,6 +533,11 @@ class TorTraceGUI(ctk.CTk):
                     widget.configure(state=state)
                 except Exception:
                     pass
+        abort_state = "normal" if running else "disabled"
+        try:
+            self.abort_button.configure(state=abort_state)
+        except Exception:
+            pass
 
     def _clear_visual_canvas(self):
         if self.current_figure is not None:
@@ -556,22 +581,98 @@ class TorTraceGUI(ctk.CTk):
         self.path_entry.insert(0, display)
 
     def on_close(self):
-        self.analysis_running = False
-        for after_id in [self.timer_after_id, self.queue_after_id, self.startup_after_id]:
-            if after_id:
-                try:
-                    self.after_cancel(after_id)
-                except Exception:
-                    pass
-        if self.analysis_process is not None and self.analysis_process.is_alive():
-            try:
-                self.analysis_process.terminate()
-            except Exception:
-                pass
+        if self.analysis_running:
+            self.abort_analysis(prompt=False, closing=True)
+        for attr_name in ["timer_after_id", "queue_after_id", "startup_after_id"]:
+            self._cancel_after_callback(attr_name)
+        self._cleanup_analysis_resources()
         try:
             self.destroy()
         except Exception:
             pass
+
+    def _drain_output_queue(self):
+        if self.output_queue is None:
+            return
+        while True:
+            try:
+                self.output_queue.get_nowait()
+            except Exception:
+                break
+
+    def _cleanup_analysis_resources(self):
+        if self.analysis_process is not None:
+            try:
+                if self.analysis_process.is_alive():
+                    self.analysis_process.join(timeout=0.2)
+            except Exception:
+                pass
+            try:
+                self.analysis_process.close()
+            except Exception:
+                pass
+            self.analysis_process = None
+
+        if self.output_queue is not None and hasattr(self.output_queue, "close"):
+            try:
+                self.output_queue.close()
+            except Exception:
+                pass
+            try:
+                self.output_queue.join_thread()
+            except Exception:
+                pass
+            self.output_queue = queue.Queue()
+
+    def _finish_aborted_analysis(self):
+        self._cancel_after_callback("queue_after_id")
+        self._cancel_after_callback("timer_after_id")
+        self.analysis_running = False
+        self.start_time = None
+        self._set_busy_state(False)
+        self._drain_output_queue()
+        self._cleanup_analysis_resources()
+        self.status.set("ABORTED")
+        self.timer.set("Aborted")
+        self.current_file.set("Current file: Analysis aborted")
+        self.write("dashboard", "Analysis aborted by user.", "high")
+
+    def abort_analysis(self, prompt=True, closing=False):
+        if not self.analysis_running:
+            return
+
+        if prompt and not self.test_mode:
+            confirmed = messagebox.askyesno(
+                "Abort Analysis",
+                "Stop the current analysis? Partial progress will not be saved.",
+            )
+            if not confirmed:
+                return
+
+        self.analysis_aborted = True
+        self.status.set("Aborting analysis...")
+        self.current_file.set("Current file: Stopping analysis")
+
+        if self.analysis_process is not None:
+            try:
+                if self.analysis_process.is_alive():
+                    self.analysis_process.terminate()
+            except Exception:
+                pass
+            try:
+                if self.analysis_process.is_alive():
+                    self.analysis_process.kill()
+            except Exception:
+                pass
+            try:
+                self.analysis_process.join(timeout=0.5)
+            except Exception:
+                pass
+
+        self._finish_aborted_analysis()
+
+        if not closing and not self.test_mode:
+            messagebox.showinfo("Analysis Aborted", "The current analysis was stopped.")
 
     def add_files(self):
         files = filedialog.askopenfilenames()
@@ -610,6 +711,7 @@ class TorTraceGUI(ctk.CTk):
             messagebox.showwarning("No Evidence Selected", "Choose evidence files or a folder before running analysis.")
             return
 
+        self.analysis_aborted = False
         self.analysis_running = True
         self._set_busy_state(True)
         self.start_time = time.time()
@@ -628,6 +730,7 @@ class TorTraceGUI(ctk.CTk):
         self.correlation_items = []
         self.report_path = ""
         self.dashboard_messages = []
+        self._cleanup_analysis_resources()
         self.output_queue = self.mp_context.Queue()
         self.latest_evidence_files = []
 
@@ -649,6 +752,7 @@ class TorTraceGUI(ctk.CTk):
 
     def update_timer(self):
         if not self.analysis_running or not self.start_time:
+            self.timer_after_id = None
             return
         elapsed = int(time.time() - self.start_time)
         self.timer.set(f"Elapsed: {elapsed}s")
@@ -657,6 +761,7 @@ class TorTraceGUI(ctk.CTk):
         self.timer_after_id = self.after(1000, self.update_timer)
 
     def process_output_queue(self):
+        self.queue_after_id = None
         processed = 0
         max_events_per_cycle = 20
         while processed < max_events_per_cycle:
@@ -668,6 +773,9 @@ class TorTraceGUI(ctk.CTk):
             processed += 1
         if self.analysis_running and self.analysis_process is not None and not self.analysis_process.is_alive():
             if self.output_queue.empty():
+                if self.analysis_aborted:
+                    self._finish_aborted_analysis()
+                    return
                 self.handle_event(
                     {
                         "type": "worker_error",
@@ -681,6 +789,8 @@ class TorTraceGUI(ctk.CTk):
 
     def handle_event(self, event):
         event_type = event.get("type")
+        if self.analysis_aborted:
+            return
         if event_type == "progress":
             value = max(0, min(100, int(event.get("value", 0))))
             self.progress.set(value / 100)
@@ -709,16 +819,22 @@ class TorTraceGUI(ctk.CTk):
             self.apply_analysis_result(event.get("result", {}))
             return
         if event_type == "worker_error":
+            self._cancel_after_callback("timer_after_id")
+            self._cancel_after_callback("queue_after_id")
             self.analysis_running = False
+            self.start_time = None
             self._set_busy_state(False)
             if self.analysis_process is not None:
                 try:
                     if self.analysis_process.is_alive():
                         self.analysis_process.terminate()
+                except Exception:
+                    pass
+                try:
                     self.analysis_process.join(timeout=0.2)
                 except Exception:
                     pass
-            self.analysis_process = None
+            self._cleanup_analysis_resources()
             self.status.set("FAILED")
             self.current_file.set("Current file: Analysis stopped")
             self.write("dashboard", event.get("message", "Worker error"), "critical")
@@ -728,9 +844,12 @@ class TorTraceGUI(ctk.CTk):
             messagebox.showerror("Analysis Error", event.get("message", "Worker error"))
 
     def apply_analysis_result(self, result, persist_case=True):
+        self._cancel_after_callback("timer_after_id")
+        self._cancel_after_callback("queue_after_id")
         self.analysis_running = False
+        self.start_time = None
         self._set_busy_state(False)
-        self.analysis_process = None
+        self._cleanup_analysis_resources()
         if not result:
             self.status.set("DONE")
             self.progress.set(1)

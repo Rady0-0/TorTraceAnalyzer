@@ -10,6 +10,7 @@ TorTraceAnalyzer is a Python-based digital forensics tool for detecting and corr
 - Reconstructs a MACB-style timeline from available timestamps.
 - Exports reports to TXT, CSV, Excel, JSON, and PDF.
 - Packages into a portable Windows EXE for users who do not have Python installed.
+- Supports analysis cancellation from the GUI when a large evidence set needs to be stopped safely.
 
 ## Supported input files
 
@@ -62,6 +63,7 @@ Each detection is normalized into the same structure:
 - `Timeline Graph`: Shows timeline events as horizontal bars.
 - `Evidence Pie`: Shows the distribution of detections by forensic layer.
 - `Relations`: Shows which artifacts came from which forensic layers.
+- `Abort`: Stops the active analysis process without closing the application.
 
 ## Interface notes
 
@@ -100,10 +102,22 @@ Build a portable release zip:
 powershell -ExecutionPolicy Bypass -File .\scripts\build_release.ps1
 ```
 
+Build a Windows installer:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\build_installer.ps1
+```
+
+Installer prerequisites:
+
+- Inno Setup 6
+- Optional: `signtool.exe` plus a valid code-signing certificate if you want a signed installer
+
 Output locations:
 
 - EXE: `dist\TorTraceAnalyzer.exe`
 - Portable release zip: `release\TorTraceAnalyzer_Portable_<date>.zip`
+- Installer: `release\TorTraceAnalyzer_Setup_<version>.exe`
 
 ## EXE portability notes
 
@@ -115,13 +129,22 @@ The packaged EXE has been hardened for use on other Windows systems:
 - PCAP parsing is bundled for offline `.pcap` and `.pcapng` processing,
 - the app no longer requires the source code beside the EXE.
 
-Because the EXE is unsigned, Windows SmartScreen may show a warning. If needed, click `More info` and then `Run anyway`.
+## Installer and signing
+
+- A full Windows installer is now included through Inno Setup.
+- The installer build is signing-ready.
+- The installer script auto-detects Inno Setup and searches common Windows SDK locations for `signtool.exe`.
+- Actual code signing still requires your own certificate and `signtool.exe`.
+- Signing instructions are available in `docs/CODE_SIGNING.md`.
+
+If the EXE or installer is unsigned, Windows SmartScreen may show a warning. If needed, click `More info` and then `Run anyway`.
 
 ## Repository layout
 
 ```text
 assets/                 icons, logo, screenshot
 hooks/                  PyInstaller runtime hook
+installer/              Inno Setup installer definition
 scripts/                EXE and release build scripts
 samples/                small demo evidence files
 app_paths.py            app-safe resource and writable path helpers
