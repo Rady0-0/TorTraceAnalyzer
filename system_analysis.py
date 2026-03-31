@@ -1,5 +1,15 @@
 import re
 
+
+def _build_timestamp_bundle(time_values, default_ts):
+    cleaned = [value.strip() for value in time_values if value and value != "0000-00-00 00:00:00"]
+    return {
+        "modified": cleaned[0] if len(cleaned) > 0 else default_ts.get("modified", "N/A"),
+        "accessed": cleaned[1] if len(cleaned) > 1 else "N/A",
+        "created": cleaned[2] if len(cleaned) > 2 else "N/A",
+    }
+
+
 def extract_internal_metadata(content, default_ts, artifact_name):
     time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
     path_pattern = r'([a-zA-Z]:\\[\\\w \.\-\(\)]+|/[\w \.\-\(\)/]+)'
@@ -19,13 +29,16 @@ def extract_internal_metadata(content, default_ts, artifact_name):
         if raw_path == "Path not found" and paths:
             raw_path = paths[0]
         return {
-            "time": times[0] if times else default_ts.get('modified', 'N/A'),
+            "timestamps": _build_timestamp_bundle(times, default_ts),
             "path": raw_path
         }
 
     idx = content.find(artifact_lower)
     if idx == -1:
-        return {"time": "N/A", "path": "Path not found"}
+        return {
+            "timestamps": _build_timestamp_bundle([], default_ts),
+            "path": "Path not found",
+        }
 
     window_start = max(0, idx-500)
     window = content[window_start: min(len(content), idx+500)]
@@ -43,16 +56,10 @@ def extract_internal_metadata(content, default_ts, artifact_name):
     if raw_path == "Path not found" and paths:
         raw_path = paths[0]
 
-    chosen_time = default_ts.get('modified', 'N/A')
-    relative_idx = idx - window_start
-    preceding_times = [match.group(1) for match in times if match.start() <= relative_idx]
-    if preceding_times:
-        chosen_time = preceding_times[-1]
-    elif times:
-        chosen_time = times[0].group(1)
+    extracted_times = [match.group(1) for match in times]
     
     return {
-        "time": chosen_time,
+        "timestamps": _build_timestamp_bundle(extracted_times, default_ts),
         "path": raw_path
     }
 
@@ -128,11 +135,7 @@ def check_system(file_data):
             "file_path": ext["path"],
             "message": "Confirmed execution of Tor-related executable via Prefetch.",
             "evidence_match": pf.upper(),
-            "disk_timestamps": {
-                "modified": ext["time"],
-                "created": ts_metadata.get("created", "N/A"),
-                "accessed": ts_metadata.get("accessed", "N/A")
-            }
+            "disk_timestamps": ext["timestamps"],
         })
 
     # ============================================
@@ -148,11 +151,7 @@ def check_system(file_data):
             "file_path": ext["path"],
             "message": "USB device usage detected (possible portable Tor usage).",
             "evidence_match": "USBSTOR",
-            "disk_timestamps": {
-                "modified": ext["time"],
-                "created": ts_metadata.get("created", "N/A"),
-                "accessed": ts_metadata.get("accessed", "N/A")
-            }
+            "disk_timestamps": ext["timestamps"],
         })
 
     # ============================================
@@ -168,11 +167,7 @@ def check_system(file_data):
             "file_path": ext["path"],
             "message": "Security logs were cleared (anti-forensics behavior).",
             "evidence_match": "Event ID 1102",
-            "disk_timestamps": {
-                "modified": ext["time"],
-                "created": ts_metadata.get("created", "N/A"),
-                "accessed": ts_metadata.get("accessed", "N/A")
-            }
+            "disk_timestamps": ext["timestamps"],
         })
 
     return results

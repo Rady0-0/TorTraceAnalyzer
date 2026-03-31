@@ -15,8 +15,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from app_paths import get_temp_graph_path, resource_path
 from case_manager import get_case_by_name, get_case_names, save_case
 from relation_graph import build_relationship_figure, save_relationship_figure
-from timeline_graph import build_timeline_figure, plot_timeline
-from visualization_utils import build_detection_pie_figure, save_detection_pie_figure
+from visualization_utils import (
+    build_activity_matrix_figure,
+    build_detection_pie_figure,
+    save_activity_matrix_figure,
+    save_detection_pie_figure,
+)
 
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("blue")
@@ -267,7 +271,7 @@ class TorTraceGUI(ctk.CTk):
         self.start_date.pack(side="left", padx=(0, 8))
         self.end_date = ctk.CTkEntry(timeline_row_1, width=130, placeholder_text="To YYYY-MM-DD")
         self.end_date.pack(side="left", padx=(0, 8))
-        self.filter_menu = ctk.CTkOptionMenu(timeline_row_1, values=["ALL", "MODIFIED"], variable=self.filter_var, command=lambda _value: self.show_timeline(), width=120)
+        self.filter_menu = ctk.CTkOptionMenu(timeline_row_1, values=["ALL", "MODIFIED", "CREATED", "ACCESSED"], variable=self.filter_var, command=lambda _value: self.show_timeline(), width=120)
         self.filter_menu.pack(side="left")
         timeline_row_2 = ctk.CTkFrame(timeline_frame, fg_color="transparent")
         timeline_row_2.pack(fill="x", padx=12, pady=(0, 8))
@@ -279,8 +283,8 @@ class TorTraceGUI(ctk.CTk):
         visual_frame = self.controls_container.add("VISUALS")
         visual_row_1 = ctk.CTkFrame(visual_frame, fg_color="transparent")
         visual_row_1.pack(fill="x", padx=12, pady=(10, 8))
-        self.timeline_graph_button = ctk.CTkButton(visual_row_1, text="Timeline Graph", command=self.show_graph, width=115)
-        self.timeline_graph_button.pack(side="left", padx=(0, 8))
+        self.activity_matrix_button = ctk.CTkButton(visual_row_1, text="Activity Matrix", command=self.show_activity_matrix, width=120)
+        self.activity_matrix_button.pack(side="left", padx=(0, 8))
         self.event_pie_button = ctk.CTkButton(visual_row_1, text="Evidence Pie", command=self.show_pie_chart, width=105)
         self.event_pie_button.pack(side="left", padx=(0, 8))
         self.relation_button = ctk.CTkButton(visual_row_1, text="Relations", command=self.show_relation, width=95)
@@ -518,7 +522,7 @@ class TorTraceGUI(ctk.CTk):
             "run_button",
             "manage_case_button",
             "search_button",
-            "timeline_graph_button",
+            "activity_matrix_button",
             "event_pie_button",
             "relation_button",
             "export_button",
@@ -1105,13 +1109,16 @@ class TorTraceGUI(ctk.CTk):
             filtered = filtered[-12:]
         return filtered
 
-    def show_graph(self):
+    def show_activity_matrix(self):
         filtered_events = self._get_filtered_timeline_events()
         if not filtered_events:
             messagebox.showwarning("No Timeline Data", "No timeline events are available for the current case or filters.")
             return
-        figure = build_timeline_figure({"events": filtered_events})
-        self._display_figure(figure, "Timeline Graph")
+        figure = build_activity_matrix_figure({"events": filtered_events})
+        self._display_figure(figure, "Activity Matrix")
+
+    def show_graph(self):
+        self.show_activity_matrix()
 
     def show_pie_chart(self):
         if not self.all_detections:
@@ -1188,10 +1195,10 @@ class TorTraceGUI(ctk.CTk):
         case_info["date"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         visual_paths = []
-        timeline_path = plot_timeline(self.timeline_data, save_path=get_temp_graph_path("timeline_graph.png"))
-        if timeline_path:
-            visual_paths.append({"title": "Timeline Graph", "path": timeline_path})
-            case_info["graph_path"] = timeline_path
+        activity_path = save_activity_matrix_figure(self.timeline_data, get_temp_graph_path("activity_matrix.png"))
+        if activity_path:
+            visual_paths.append({"title": "Activity Matrix", "path": activity_path})
+            case_info["graph_path"] = activity_path
         pie_path = save_detection_pie_figure(self.all_detections, get_temp_graph_path("evidence_pie.png"))
         if pie_path:
             visual_paths.append({"title": "Evidence Pie", "path": pie_path})

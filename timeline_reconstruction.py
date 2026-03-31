@@ -43,6 +43,7 @@ def _timeline_relevant_detection(detection):
 def build_timeline(all_detections):
     events = []
     seen = set()
+    type_counts = {}
 
     for detection in all_detections:
         if not _timeline_relevant_detection(detection):
@@ -51,27 +52,45 @@ def build_timeline(all_detections):
         timestamps = detection.get("disk_timestamps", {})
         layer = detection.get("layer", "UNKNOWN")
         artifact = detection.get("file_name") or detection.get("artifact") or "UNKNOWN"
-        modified_value = timestamps.get("modified")
-        if not safe_parse(modified_value):
-            continue
 
-        event_key = (modified_value, "MODIFIED", layer, artifact)
-        if event_key in seen:
-            continue
-        seen.add(event_key)
-        events.append(
-            {
-                "time": modified_value,
-                "type": "MODIFIED",
-                "layer": layer,
-                "artifact": artifact,
-            }
-        )
+        for field_name, event_type in (
+            ("modified", "MODIFIED"),
+            ("created", "CREATED"),
+            ("accessed", "ACCESSED"),
+        ):
+            timestamp_value = timestamps.get(field_name)
+            if not safe_parse(timestamp_value):
+                continue
+
+            event_key = (timestamp_value, event_type, layer, artifact)
+            if event_key in seen:
+                continue
+
+            seen.add(event_key)
+            type_counts[event_type] = type_counts.get(event_type, 0) + 1
+            events.append(
+                {
+                    "time": timestamp_value,
+                    "type": event_type,
+                    "layer": layer,
+                    "artifact": artifact,
+                }
+            )
 
     events = [event for event in events if safe_parse(event.get("time"))]
     events.sort(key=lambda event: (safe_parse(event["time"]), event["layer"], event["artifact"], event["type"]))
 
+    summary_parts = []
+    for event_type in ("MODIFIED", "CREATED", "ACCESSED"):
+        count = type_counts.get(event_type, 0)
+        if count:
+            summary_parts.append(f"{count} {event_type.lower()}")
+
+    summary_text = f"{len(events)} timeline events reconstructed from artifact timestamps."
+    if summary_parts:
+        summary_text += " " + ", ".join(summary_parts) + "."
+
     return {
         "events": events,
-        "summary": f"{len(events)} timeline events reconstructed from artifact timestamps.",
+        "summary": summary_text,
     }

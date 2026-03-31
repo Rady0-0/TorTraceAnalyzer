@@ -45,7 +45,7 @@ def _normalize_visual_paths(visual_paths=None, graph_path=None):
             visuals.append({"title": title, "path": path})
 
     if not visuals and graph_path and os.path.exists(graph_path):
-        visuals.append({"title": "Timeline Graph", "path": graph_path})
+        visuals.append({"title": "Primary Visualization", "path": graph_path})
 
     return visuals
 
