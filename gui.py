@@ -6,6 +6,7 @@ import traceback
 import tkinter as tk
 from datetime import datetime
 from tkinter import filedialog, messagebox
+from tkinter import ttk
 
 import customtkinter as ctk
 from PIL import Image
@@ -89,6 +90,7 @@ class TorTraceGUI(ctk.CTk):
         self.status = tk.StringVar(value="READY")
         self.timer = tk.StringVar(value="Elapsed: 0s")
         self.case_summary = tk.StringVar(value="No case loaded")
+        self.timeline_summary = tk.StringVar(value="Timeline table is empty.")
 
         self.layer_data = {"memory": [], "system": [], "network": [], "application": [], "transport": []}
         self.latest_layer_results = {layer: [] for layer in self.layer_data}
@@ -202,7 +204,7 @@ class TorTraceGUI(ctk.CTk):
         self.tabs = {}
         self.tabview = ctk.CTkTabview(left_panel)
         self.tabview.pack(fill="both", expand=True, padx=12, pady=12)
-        for name in ["dashboard", "memory", "system", "network", "application", "transport", "timeline"]:
+        for name in ["dashboard", "memory", "system", "network", "application", "transport"]:
             tab = self.tabview.add(name.upper())
             text_widget = tk.Text(tab, bg="#0f172a", fg="#e2e8f0", insertbackground="white", font=("Consolas", 11), wrap="word", relief="flat", borderwidth=0, padx=10, pady=10)
             text_widget.pack(fill="both", expand=True)
@@ -216,6 +218,9 @@ class TorTraceGUI(ctk.CTk):
             tab.tag_config("normal", foreground="#e2e8f0")
             tab.tag_config("muted", foreground="#94a3b8")
         self.output = self.tabs["dashboard"]
+
+        timeline_tab = self.tabview.add("TIMELINE")
+        self._build_timeline_tab(timeline_tab)
 
         self.side_workspace = ctk.CTkTabview(right_panel)
         self.side_workspace.pack(fill="both", expand=True, padx=14, pady=14)
@@ -236,6 +241,179 @@ class TorTraceGUI(ctk.CTk):
         self.notes_box.insert("1.0", "Investigator notes and conclusions...")
         self.side_workspace.set("VISUALS")
         self._show_visual_placeholder("Run analysis and choose a visual.")
+
+    def _build_timeline_tab(self, timeline_tab):
+        timeline_shell = ctk.CTkFrame(timeline_tab, fg_color="transparent")
+        timeline_shell.pack(fill="both", expand=True, padx=10, pady=10)
+
+        timeline_header = ctk.CTkFrame(timeline_shell, fg_color="transparent")
+        timeline_header.pack(fill="x", pady=(0, 8))
+        ctk.CTkLabel(
+            timeline_header,
+            text="Timeline Evidence Table",
+            font=ctk.CTkFont(size=16, weight="bold"),
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            timeline_header,
+            textvariable=self.timeline_summary,
+            text_color="#9fb2c3",
+            justify="left",
+        ).pack(anchor="w", pady=(4, 0))
+
+        self.timeline_style = ttk.Style()
+        try:
+            self.timeline_style.theme_use("clam")
+        except Exception:
+            pass
+
+        self.timeline_style.configure(
+            "TorTrace.Treeview",
+            background="#0f172a",
+            foreground="#e2e8f0",
+            fieldbackground="#0f172a",
+            borderwidth=0,
+            rowheight=28,
+            font=("Segoe UI", 10),
+        )
+        self.timeline_style.configure(
+            "TorTrace.Treeview.Heading",
+            background="#1f2937",
+            foreground="#f8fafc",
+            relief="flat",
+            font=("Segoe UI", 10, "bold"),
+        )
+        self.timeline_style.map(
+            "TorTrace.Treeview",
+            background=[("selected", "#1d4ed8")],
+            foreground=[("selected", "#f8fafc")],
+        )
+
+        table_shell = ctk.CTkFrame(timeline_shell, corner_radius=12)
+        table_shell.pack(fill="both", expand=True)
+
+        self.timeline_table = ttk.Treeview(
+            table_shell,
+            style="TorTrace.Treeview",
+            columns=("time", "event", "layer", "artifact"),
+            show="headings",
+            selectmode="browse",
+        )
+        self.timeline_table.heading("time", text="Timestamp")
+        self.timeline_table.heading("event", text="Event")
+        self.timeline_table.heading("layer", text="Layer")
+        self.timeline_table.heading("artifact", text="Artifact")
+        self.timeline_table.column("time", width=190, anchor="w")
+        self.timeline_table.column("event", width=110, anchor="center")
+        self.timeline_table.column("layer", width=110, anchor="center")
+        self.timeline_table.column("artifact", width=520, anchor="w")
+
+        timeline_scroll_y = ttk.Scrollbar(table_shell, orient="vertical", command=self.timeline_table.yview)
+        timeline_scroll_x = ttk.Scrollbar(table_shell, orient="horizontal", command=self.timeline_table.xview)
+        self.timeline_table.configure(yscrollcommand=timeline_scroll_y.set, xscrollcommand=timeline_scroll_x.set)
+
+        self.timeline_table.grid(row=0, column=0, sticky="nsew")
+        timeline_scroll_y.grid(row=0, column=1, sticky="ns")
+        timeline_scroll_x.grid(row=1, column=0, sticky="ew")
+        table_shell.grid_rowconfigure(0, weight=1)
+        table_shell.grid_columnconfigure(0, weight=1)
+
+        self.timeline_table.tag_configure("modified", background="#0f172a", foreground="#4dd0e1")
+        self.timeline_table.tag_configure("created", background="#0f172a", foreground="#40e0a0")
+        self.timeline_table.tag_configure("accessed", background="#0f172a", foreground="#ffb84d")
+        self.timeline_table.tag_configure("anomaly", background="#0f172a", foreground="#ff6b6b")
+        self.timeline_table.bind("<<TreeviewSelect>>", self._on_timeline_select)
+
+        details_shell = ctk.CTkFrame(timeline_shell, corner_radius=12)
+        details_shell.pack(fill="x", pady=(10, 0))
+        ctk.CTkLabel(
+            details_shell,
+            text="Selected Event Details",
+            font=ctk.CTkFont(size=14, weight="bold"),
+        ).pack(anchor="w", padx=12, pady=(10, 6))
+        self.timeline_detail_box = ctk.CTkTextbox(details_shell, height=130)
+        self.timeline_detail_box.pack(fill="x", padx=12, pady=(0, 12))
+        self._set_timeline_detail("Select a timeline row to inspect its artifact details.")
+
+    def _set_timeline_detail(self, text):
+        self.timeline_detail_box.configure(state="normal")
+        self.timeline_detail_box.delete("1.0", tk.END)
+        self.timeline_detail_box.insert("1.0", text)
+        self.timeline_detail_box.configure(state="disabled")
+
+    def _clear_timeline_table(self, message="Timeline table is empty."):
+        if hasattr(self, "timeline_table"):
+            for item_id in self.timeline_table.get_children():
+                self.timeline_table.delete(item_id)
+        self.timeline_summary.set(message)
+        if hasattr(self, "timeline_detail_box"):
+            self._set_timeline_detail("Select a timeline row to inspect its artifact details.")
+
+    def _timeline_row_tag(self, event_type):
+        return {
+            "MODIFIED": "modified",
+            "CREATED": "created",
+            "ACCESSED": "accessed",
+            "ANOMALY": "anomaly",
+        }.get(str(event_type).upper(), "")
+
+    def _find_detection_for_timeline_event(self, event):
+        event_layer = str(event.get("layer", "")).title()
+        event_artifact = str(event.get("artifact", ""))
+        event_time = event.get("time")
+
+        for detection in self.all_detections:
+            layer = str(detection.get("layer", "")).title()
+            artifact = str(detection.get("file_name") or detection.get("artifact") or "")
+            timestamps = detection.get("disk_timestamps", {})
+            if layer != event_layer or artifact != event_artifact:
+                continue
+            if event.get("type") == "MODIFIED" and timestamps.get("modified") == event_time:
+                return detection
+            if event.get("type") == "CREATED" and timestamps.get("created") == event_time:
+                return detection
+            if event.get("type") == "ACCESSED" and timestamps.get("accessed") == event_time:
+                return detection
+        return None
+
+    def _on_timeline_select(self, _event=None):
+        selection = self.timeline_table.selection()
+        if not selection:
+            return
+
+        item_id = selection[0]
+        event = self.timeline_table.item(item_id, "values")
+        if not event or len(event) < 4:
+            return
+
+        event_payload = {
+            "time": event[0],
+            "type": event[1],
+            "layer": event[2],
+            "artifact": event[3],
+        }
+        detection = self._find_detection_for_timeline_event(event_payload)
+
+        lines = [
+            f"Timestamp : {event_payload['time']}",
+            f"Event     : {event_payload['type']}",
+            f"Layer     : {event_payload['layer']}",
+            f"Artifact  : {event_payload['artifact']}",
+        ]
+
+        if detection:
+            timestamps = detection.get("disk_timestamps", {})
+            lines.extend(
+                [
+                    f"Path      : {detection.get('file_path', 'N/A')}",
+                    f"Evidence  : {detection.get('evidence_match', 'N/A')}",
+                    f"Modified  : {timestamps.get('modified', 'N/A')}",
+                    f"Created   : {timestamps.get('created', 'N/A')}",
+                    f"Accessed  : {timestamps.get('accessed', 'N/A')}",
+                    f"Note      : {detection.get('message', 'N/A')}",
+                ]
+            )
+
+        self._set_timeline_detail("\n".join(lines))
 
     def _cancel_after_callback(self, attr_name):
         after_id = getattr(self, attr_name, None)
@@ -742,6 +920,7 @@ class TorTraceGUI(ctk.CTk):
             self.layer_data[key] = []
         for tab in self.tabs.values():
             tab.delete("1.0", tk.END)
+        self._clear_timeline_table()
 
         self.tabview.set("DASHBOARD")
         self.write("dashboard", "Starting analysis...", "medium")
@@ -1071,6 +1250,19 @@ class TorTraceGUI(ctk.CTk):
                 tab.tag_config("highlight", background="#feca57", foreground="#111827")
                 idx = end
 
+        if hasattr(self, "timeline_table"):
+            for item_id in self.timeline_table.selection():
+                self.timeline_table.selection_remove(item_id)
+            if keyword:
+                for item_id in self.timeline_table.get_children():
+                    values = self.timeline_table.item(item_id, "values")
+                    if keyword.lower() in " ".join(str(value) for value in values).lower():
+                        self.timeline_table.selection_set(item_id)
+                        self.timeline_table.focus(item_id)
+                        self.timeline_table.see(item_id)
+                        self._on_timeline_select()
+                        break
+
     def _parse_timeline_time(self, value):
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
             try:
@@ -1128,38 +1320,42 @@ class TorTraceGUI(ctk.CTk):
         self._display_figure(figure, "Evidence Pie")
 
     def show_timeline(self, activate_tab=True):
-        tab = self.tabs["timeline"]
-        tab.delete("1.0", tk.END)
         events = self._get_filtered_timeline_events()
         if not events:
-            tab.insert(tk.END, "No timeline events are available.\n", "normal")
+            self._clear_timeline_table("No timeline events are available for the current case.")
             return
         if activate_tab:
             self.tabview.set("TIMELINE")
 
-        grouped = {}
+        self._clear_timeline_table()
+
+        event_counts = {}
         for event in events:
-            time_value = event.get("time")
-            layer = event.get("layer", "UNKNOWN")
-            artifact = event.get("artifact") or event.get("file_name") or "UNKNOWN"
-            key = (time_value, layer, artifact)
-            grouped.setdefault(key, []).append(event.get("type", ""))
+            event_type = event.get("type", "UNKNOWN")
+            event_counts[event_type] = event_counts.get(event_type, 0) + 1
 
-        if not grouped:
-            tab.insert(tk.END, "No timeline events match the current filters.\n", "normal")
-            return
+            values = (
+                event.get("time", "N/A"),
+                event_type,
+                event.get("layer", "UNKNOWN"),
+                event.get("artifact") or event.get("file_name") or "UNKNOWN",
+            )
+            self.timeline_table.insert("", "end", values=values, tags=(self._timeline_row_tag(event_type),))
 
-        for time_value, layer, artifact in sorted(grouped, key=lambda item: self._parse_timeline_time(item[0][0]) or datetime.max):
-            tab.insert(tk.END, f"{time_value} | {layer} | {artifact}\n", "artifact")
-            unique_types = list(dict.fromkeys(grouped[(time_value, layer, artifact)]))
-            for event_type in unique_types:
-                line = f"   -> {event_type} | {layer} | {artifact}"
-                if event_type == "ANOMALY":
-                    line += " | HIGH PRIORITY"
-                tag = {"ANOMALY": "critical", "MODIFIED": "artifact", "CREATED": "medium", "ACCESSED": "high"}.get(event_type, "normal")
-                tab.insert(tk.END, line + "\n", tag)
-            tab.insert(tk.END, "\n", "normal")
-        tab.see(tk.END)
+        summary_parts = [f"{count} {event_type.lower()}" for event_type, count in event_counts.items()]
+        summary_text = f"{len(events)} timeline rows loaded"
+        if summary_parts:
+            summary_text += " | " + ", ".join(summary_parts)
+        self.timeline_summary.set(summary_text)
+
+        children = self.timeline_table.get_children()
+        if children:
+            self.timeline_table.selection_set(children[0])
+            self.timeline_table.focus(children[0])
+            self.timeline_table.see(children[0])
+            self._on_timeline_select()
+        else:
+            self._set_timeline_detail("Select a timeline row to inspect its artifact details.")
 
     def build_detections(self):
         return list(self.all_detections)
