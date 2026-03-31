@@ -46,6 +46,14 @@ def _detection(file_name, message, evidence_match, file_path, timestamps, status
     }
 
 
+def _tor_ports_for_flow(sport, dport):
+    flow_ports = []
+    for port in (sport, dport):
+        if port in TOR_PORTS and port not in flow_ports:
+            flow_ports.append(port)
+    return flow_ports
+
+
 def analyze_pcap_transport(file_path):
     cache_root = os.path.join(tempfile.gettempdir(), "TorTraceAnalyzer", "scapy-cache")
     os.makedirs(cache_root, exist_ok=True)
@@ -109,6 +117,7 @@ def analyze_pcap_transport(file_path):
 
         is_tor = dport in TOR_PORTS or sport in TOR_PORTS
         is_encrypted = dport == 443 or sport == 443
+        tor_ports = _tor_ports_for_flow(sport, dport)
 
         if is_tor:
             tor_flows += 1
@@ -122,15 +131,23 @@ def analyze_pcap_transport(file_path):
             elif is_encrypted:
                 file_name = "ENCRYPTED DATA FLOW"
 
-            flow_path = f"{src}:{sport} -> {dst}:{dport}"
+            flow_path = f"{src} -> {dst}"
+            message = f"{direction} {protocol} traffic ({data['packets']} packets)."
+            evidence = f"Bytes: {data['bytes']}"
+
+            if tor_ports:
+                tor_port_summary = ", ".join(str(port) for port in tor_ports)
+                flow_path = f"{src} -> {dst} [Tor ports: {tor_port_summary}]"
+                message = (
+                    f"{direction} {protocol} traffic ({data['packets']} packets) "
+                    f"through Tor-related port(s): {tor_port_summary}."
+                )
+                evidence = f"Tor ports: {tor_port_summary} | Bytes: {data['bytes']}"
             results.append(
                 _detection(
                     file_name=file_name,
-                    message=(
-                        f"{direction} {protocol} traffic ({data['packets']} packets) "
-                        f"via source port {sport} to destination port {dport}."
-                    ),
-                    evidence_match=f"Ports: {sport} -> {dport} | Bytes: {data['bytes']}",
+                    message=message,
+                    evidence_match=evidence,
                     file_path=flow_path,
                     timestamps=timestamps,
                 )

@@ -15,6 +15,13 @@ from transport_analysis import analyze_transport
 
 
 ACTIVE_LAYERS = ("memory", "system", "network", "application", "transport")
+LAYER_PRIORITY = {
+    "System": 0,
+    "Application": 1,
+    "Network": 2,
+    "Transport": 3,
+    "Memory": 4,
+}
 
 
 def _empty_result():
@@ -127,6 +134,27 @@ def _deduplicate_detections(detections):
         unique.append(detection)
 
     return unique
+
+
+def _parse_sort_time(value):
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except (TypeError, ValueError):
+            continue
+    return datetime.max
+
+
+def _sort_detections(detections):
+    return sorted(
+        detections,
+        key=lambda detection: (
+            LAYER_PRIORITY.get(str(detection.get("layer", "")).title(), 99),
+            _parse_sort_time(detection.get("disk_timestamps", {}).get("modified")),
+            str(detection.get("file_name", "")),
+            str(detection.get("file_path", "")),
+        ),
+    )
 
 
 def _format_detection(detection):
@@ -252,7 +280,10 @@ def run_analysis(inputs, event_callback=None, case_info=None):
         progress_value = 5 + int((index / len(evidence_files)) * 65)
         _progress(event_callback, progress_value, f"Processed {index}/{len(evidence_files)} file(s)")
 
-    all_detections = _deduplicate_detections(all_detections)
+    for layer_name in result["layer_results"]:
+        result["layer_results"][layer_name] = _sort_detections(result["layer_results"][layer_name])
+
+    all_detections = _sort_detections(_deduplicate_detections(all_detections))
     result["all_detections"] = all_detections
 
     _progress(event_callback, 75, "Building correlations...")

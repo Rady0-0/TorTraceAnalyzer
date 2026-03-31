@@ -1,6 +1,9 @@
 import re
 
 
+TOR_PORTS = ("9001", "9030", "9050", "9150")
+
+
 # ============================================
 # 1. VALID PUBLIC IP FILTER
 # ============================================
@@ -60,6 +63,14 @@ def extract_candidate_ports(content):
     return ports[:8]
 
 
+def extract_tor_ports(content):
+    found_ports = []
+    for port in TOR_PORTS:
+        if re.search(rf"(?::|\s){port}(?!\d)", content):
+            found_ports.append(port)
+    return found_ports
+
+
 # ============================================
 # 🔥 3. DETECT IF CONTENT IS JUST REPORT TEXT
 # ============================================
@@ -87,11 +98,11 @@ def analyze_transport(file_data):
         return results  # DO NOT ANALYZE REPORT TEXT
 
     valid_ips = extract_valid_ips(content)
-    detected_ports = extract_candidate_ports(content)
+    detected_ports = extract_tor_ports(content)
 
     tcp_count = len(re.findall(r'\btcp\b', content))
     tls_count = len(re.findall(r'\btls\b', content)) + len(re.findall(r':443', content))
-    port_summary = ", ".join(detected_ports) if detected_ports else "None detected"
+    tor_port_summary = ", ".join(detected_ports) if detected_ports else "None detected"
 
     # ============================================
     # 🔥 STRICT CONDITIONS (ALL MUST PASS)
@@ -103,13 +114,20 @@ def analyze_transport(file_data):
     # 1. TCP DATA FLOW
     # ============================================
     if tcp_count > 50:
+        message = "High-volume TCP connections indicate real data transmission."
+        evidence = f"TCP count: {tcp_count}"
+        path = f"Transport Layer [{len(valid_ips)} IPs]"
+        if detected_ports:
+            message += f" Tor-related ports observed: {tor_port_summary}."
+            evidence += f" | Tor ports: {tor_port_summary}"
+            path += f" [Tor ports: {tor_port_summary}]"
         results.append({
             "layer": "Transport",
             "status": "Detected",
             "file_name": "TCP DATA FLOW",
-            "file_path": f"Transport Layer [{len(valid_ips)} IPs | Ports: {port_summary}]",
-            "message": f"High-volume TCP connections indicate real data transmission via ports {port_summary}.",
-            "evidence_match": f"TCP count: {tcp_count} | Ports: {port_summary}",
+            "file_path": path,
+            "message": message,
+            "evidence_match": evidence,
             "disk_timestamps": ts_metadata
         })
 
@@ -117,23 +135,28 @@ def analyze_transport(file_data):
     # 2. ENCRYPTED TRANSPORT
     # ============================================
     if tls_count > 30:
+        message = "Sustained encrypted transport detected."
+        evidence = f"TLS count: {tls_count}"
+        path = "TLS/HTTPS Channel"
+        if detected_ports:
+            message += f" Tor-related ports observed: {tor_port_summary}."
+            evidence += f" | Tor ports: {tor_port_summary}"
+            path += f" [Tor ports: {tor_port_summary}]"
         results.append({
             "layer": "Transport",
             "status": "Detected",
             "file_name": "ENCRYPTED TRANSPORT",
-            "file_path": f"TLS/HTTPS Channel [Ports: {port_summary}]",
-            "message": f"Sustained encrypted transport detected across ports {port_summary}.",
-            "evidence_match": f"TLS count: {tls_count} | Ports: {port_summary}",
+            "file_path": path,
+            "message": message,
+            "evidence_match": evidence,
             "disk_timestamps": ts_metadata
         })
 
     # ============================================
     # 3. TOR TRANSPORT CHANNEL
     # ============================================
-    tor_ports = ["9001", "9030", "9050", "9150"]
-
-    for port in tor_ports:
-        if re.search(rf"(?::|\s){port}(?!\d)", content):
+    for port in TOR_PORTS:
+        if port in detected_ports:
             results.append({
                 "layer": "Transport",
                 "status": "Detected",
@@ -148,13 +171,20 @@ def analyze_transport(file_data):
     # 4. DATA TRANSPORT (REALISTIC)
     # ============================================
     if len(valid_ips) > 10 and (tcp_count > 50 or tls_count > 30):
+        message = "Pattern suggests actual data movement across the network."
+        evidence = f"IPs: {valid_ips[:5]}"
+        path = f"Multiple External Nodes [{len(valid_ips)} IPs]"
+        if detected_ports:
+            message += f" Tor-related ports observed: {tor_port_summary}."
+            evidence += f" | Tor ports: {tor_port_summary}"
+            path += f" [Tor ports: {tor_port_summary}]"
         results.append({
             "layer": "Transport",
             "status": "Suspicious",
             "file_name": "POSSIBLE DATA TRANSPORT",
-            "file_path": f"Multiple External Nodes [{len(valid_ips)} IPs | Ports: {port_summary}]",
-            "message": f"Pattern suggests actual data movement across network using ports {port_summary}.",
-            "evidence_match": f"IPs: {valid_ips[:5]} | Ports: {port_summary}",
+            "file_path": path,
+            "message": message,
+            "evidence_match": evidence,
             "disk_timestamps": ts_metadata
         })
 
