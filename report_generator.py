@@ -36,6 +36,14 @@ def _case_lines(case_info):
     return lines
 
 
+def _detection_shows_timestamps(detection):
+    layer = str(detection.get("layer", "")).strip().lower()
+    if layer not in {"system", "application", "memory"}:
+        return False
+    timestamps = detection.get("disk_timestamps", {})
+    return any(str(timestamps.get(field, "")).strip() not in {"", "N/A"} for field in ("modified", "created", "accessed"))
+
+
 def _normalize_visual_paths(visual_paths=None, graph_path=None):
     visuals = []
     for visual in visual_paths or []:
@@ -134,9 +142,10 @@ def generate_report(
             report_file.write(f"\n[{detection.get('layer')}] {detection.get('file_name')}\n")
             report_file.write(f"Path     : {detection.get('file_path')}\n")
             report_file.write(f"Evidence : {detection.get('evidence_match')}\n")
-            report_file.write(f"Modified : {timestamps.get('modified')}\n")
-            report_file.write(f"Created  : {timestamps.get('created')}\n")
-            report_file.write(f"Accessed : {timestamps.get('accessed')}\n")
+            if _detection_shows_timestamps(detection):
+                report_file.write(f"Modified : {timestamps.get('modified')}\n")
+                report_file.write(f"Created  : {timestamps.get('created')}\n")
+                report_file.write(f"Accessed : {timestamps.get('accessed')}\n")
             report_file.write(f"Note     : {detection.get('message')}\n")
             report_file.write("-" * 80 + "\n")
 
@@ -231,9 +240,10 @@ def export_pdf_report(
         elements.append(Paragraph(f"[{detection.get('layer')}] {detection.get('file_name')}", styles["Heading3"]))
         elements.append(Paragraph(f"Path: {detection.get('file_path')}", styles["Normal"]))
         elements.append(Paragraph(f"Evidence: {detection.get('evidence_match')}", styles["Normal"]))
-        elements.append(Paragraph(f"Modified: {timestamps.get('modified')}", styles["Normal"]))
-        elements.append(Paragraph(f"Created: {timestamps.get('created')}", styles["Normal"]))
-        elements.append(Paragraph(f"Accessed: {timestamps.get('accessed')}", styles["Normal"]))
+        if _detection_shows_timestamps(detection):
+            elements.append(Paragraph(f"Modified: {timestamps.get('modified')}", styles["Normal"]))
+            elements.append(Paragraph(f"Created: {timestamps.get('created')}", styles["Normal"]))
+            elements.append(Paragraph(f"Accessed: {timestamps.get('accessed')}", styles["Normal"]))
         elements.append(Paragraph(f"Note: {detection.get('message')}", styles["Normal"]))
         elements.append(Spacer(1, 10))
 
@@ -260,13 +270,14 @@ def export_custom_report(
     flat_data = []
     for detection in all_detections:
         timestamps = detection.get("disk_timestamps", {})
+        show_timestamps = _detection_shows_timestamps(detection)
         flat_data.append(
             {
                 "Layer": detection.get("layer"),
                 "Artifact": detection.get("file_name"),
-                "Modified": timestamps.get("modified"),
-                "Created": timestamps.get("created"),
-                "Accessed": timestamps.get("accessed"),
+                "Modified": timestamps.get("modified") if show_timestamps else "",
+                "Created": timestamps.get("created") if show_timestamps else "",
+                "Accessed": timestamps.get("accessed") if show_timestamps else "",
                 "Evidence": detection.get("evidence_match"),
                 "Path": detection.get("file_path"),
                 "Message": detection.get("message"),

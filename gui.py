@@ -482,11 +482,19 @@ class TorTraceGUI(ctk.CTk):
             detection.get("evidence_match", ""),
             detection.get("file_path", ""),
             detection.get("message", ""),
-            timestamps.get("modified", ""),
-            timestamps.get("created", ""),
-            timestamps.get("accessed", ""),
         ]
+        if self._layer_shows_timestamps(detection.get("layer", "")):
+            parts.extend(
+                [
+                    timestamps.get("modified", ""),
+                    timestamps.get("created", ""),
+                    timestamps.get("accessed", ""),
+                ]
+            )
         return " ".join(str(part) for part in parts if part)
+
+    def _layer_shows_timestamps(self, layer_key):
+        return str(layer_key).strip().lower() in {"system", "application", "memory"}
 
     def _find_layer_detection(self, layer_key, keyword):
         query = str(keyword).strip().lower()
@@ -524,10 +532,15 @@ class TorTraceGUI(ctk.CTk):
             f"Path     : {detection.get('file_path', 'N/A')}",
             f"Evidence : {detection.get('evidence_match', 'N/A')}",
             f"Message  : {detection.get('message', 'N/A')}",
-            f"Modified : {timestamps.get('modified', 'N/A')}",
-            f"Created  : {timestamps.get('created', 'N/A')}",
-            f"Accessed : {timestamps.get('accessed', 'N/A')}",
         ]
+        if self._layer_shows_timestamps(layer_key):
+            lines.extend(
+                [
+                    f"Modified : {timestamps.get('modified', 'N/A')}",
+                    f"Created  : {timestamps.get('created', 'N/A')}",
+                    f"Accessed : {timestamps.get('accessed', 'N/A')}",
+                ]
+            )
         self._set_layer_detail(layer_key, "\n".join(lines))
 
     def _timeline_row_tag(self, event_type):

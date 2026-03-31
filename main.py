@@ -159,17 +159,23 @@ def _sort_detections(detections):
 
 def _format_detection(detection):
     timestamps = detection.get("disk_timestamps", {})
-    return (
-        f"STATUS   : {detection.get('status')}\n"
-        f"ARTIFACT : {detection.get('file_name')}\n"
-        f"PATH     : {detection.get('file_path')}\n"
-        f"EVIDENCE : {detection.get('evidence_match')}\n"
-        f"MODIFIED : {timestamps.get('modified')}\n"
-        f"CREATED  : {timestamps.get('created')}\n"
-        f"ACCESSED : {timestamps.get('accessed')}\n"
-        f"NOTE     : {detection.get('message')}\n"
-        "------------------------------\n"
-    )
+    lines = [
+        f"STATUS   : {detection.get('status')}",
+        f"ARTIFACT : {detection.get('file_name')}",
+        f"PATH     : {detection.get('file_path')}",
+        f"EVIDENCE : {detection.get('evidence_match')}",
+    ]
+    if str(detection.get("layer", "")).title() in {"System", "Application", "Memory"}:
+        lines.extend(
+            [
+                f"MODIFIED : {timestamps.get('modified')}",
+                f"CREATED  : {timestamps.get('created')}",
+                f"ACCESSED : {timestamps.get('accessed')}",
+            ]
+        )
+    lines.append(f"NOTE     : {detection.get('message')}")
+    lines.append("------------------------------")
+    return "\n".join(lines) + "\n"
 
 
 def _print_console_result(result):
@@ -232,12 +238,17 @@ def run_analysis(inputs, event_callback=None, case_info=None):
             extension = os.path.splitext(file_path)[1].lower()
 
             if extension in {".pcap", ".pcapng"}:
-                from pcap_transport_analysis import analyze_pcap_transport
+                from pcap_transport_analysis import analyze_pcap_layers
 
-                transport_results = _positive_results(
-                    analyze_pcap_transport(file_path),
-                    "Transport",
-                )
+                network_results, transport_results = analyze_pcap_layers(file_path)
+                network_results = _positive_results(network_results, "Network")
+                transport_results = _positive_results(transport_results, "Transport")
+
+                if network_results:
+                    result["layer_results"]["network"].extend(network_results)
+                    result["layer_hits"]["network"] = True
+                    all_detections.extend(network_results)
+
                 if transport_results:
                     result["layer_results"]["transport"].extend(transport_results)
                     result["layer_hits"]["transport"] = True

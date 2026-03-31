@@ -1,7 +1,8 @@
-import os
 import datetime
 import json
+import os
 import re
+
 import pandas as pd
 from docx import Document
 
@@ -12,6 +13,9 @@ MAX_EXCEL_ROWS = 350
 MAX_DOCX_PARAGRAPHS = 600
 LARGE_TEXT_HEADER_LINES = 60
 LARGE_TEXT_MAX_MATCHED_LINES = 1200
+MAX_BINARY_SCAN_BYTES = 512 * 1024 * 1024
+BINARY_CHUNK_SIZE = 2 * 1024 * 1024
+BINARY_MAX_MATCHED_STRINGS = 12000
 LARGE_TEXT_RELEVANT_KEYWORDS = [
     "tor browser.lnk",
     "tor browser",
@@ -34,6 +38,21 @@ LARGE_TEXT_RELEVANT_KEYWORDS = [
     ":9150",
     ":9001",
     ":9030",
+]
+MEMORY_RELEVANT_KEYWORDS = [
+    "tor",
+    "tor.exe",
+    "torrc",
+    "firefox.exe",
+    ".onion",
+    "onion",
+    "socksport",
+    "controlport",
+    "obfs4",
+    "bridge",
+    "volatility foundation",
+    "pslist",
+    "netscan",
 ]
 
 
@@ -71,8 +90,8 @@ def read_text_safely(filepath, strip_html=False):
     if size_bytes > MAX_TEXT_BYTES:
         return extract_relevant_lines_from_large_text(filepath, strip_html=strip_html)
 
-    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-        content = f.read(size_bytes)
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as file_obj:
+        content = file_obj.read(size_bytes)
 
     if strip_html:
         content = re.sub(r"<[^>]*>", " ", content)
@@ -85,8 +104,8 @@ def read_json_safely(filepath):
     if size_bytes > MAX_TEXT_BYTES:
         return read_text_safely(filepath)
 
-    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-        return json.dumps(json.load(f), indent=2)[:MAX_TEXT_CHARS]
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as file_obj:
+        return json.dumps(json.load(file_obj), indent=2)[:MAX_TEXT_CHARS]
 
 
 def read_excel_safely(filepath):
@@ -94,108 +113,118 @@ def read_excel_safely(filepath):
 
 
 def read_docx_safely(filepath):
-    paragraphs = [p.text for p in Document(filepath).paragraphs[:MAX_DOCX_PARAGRAPHS]]
+    paragraphs = [paragraph.text for paragraph in Document(filepath).paragraphs[:MAX_DOCX_PARAGRAPHS]]
     content = "\n".join(paragraphs)
     if len(paragraphs) >= MAX_DOCX_PARAGRAPHS:
         content += "\n[TRUNCATED LARGE DOCX FILE]"
     return content[:MAX_TEXT_CHARS]
 
 
-# ============================================
-# 🔥 SAFE BINARY STRING EXTRACTOR
-# ============================================
-def extract_strings_from_binary(filepath, min_length=4, max_size_mb=50):
+def _binary_string_is_relevant(text):
+    text_lower = text.lower()
+    return any(keyword in text_lower for keyword in MEMORY_RELEVANT_KEYWORDS)
+
+
+# Safe binary string extraction for memory-like evidence files.
+def extract_strings_from_binary(filepath, min_length=4):
     try:
-        file_size = os.path.getsize(filepath) / (1024 * 1024)
+        file_size = os.path.getsize(filepath)
+        bytes_to_scan = min(file_size, MAX_BINARY_SCAN_BYTES)
+        matched_strings = []
+        total_chars = 0
+        carry = b""
+        pattern = re.compile(rb"[ -~]{%d,}" % min_length)
 
-        # ⚠️ Prevent huge file freeze
-        if file_size > max_size_mb:
-            return "[SKIPPED LARGE BINARY FILE]"
+        with open(filepath, "rb") as file_obj:
+            scanned = 0
+            while scanned < bytes_to_scan and len(matched_strings) < BINARY_MAX_MATCHED_STRINGS:
+                chunk = file_obj.read(min(BINARY_CHUNK_SIZE, bytes_to_scan - scanned))
+                if not chunk:
+                    break
 
-        with open(filepath, "rb") as f:
-            data = f.read()
+                scanned += len(chunk)
+                data = carry + chunk
+                carry = b""
+                matches = list(pattern.finditer(data))
 
-        strings = re.findall(rb"[ -~]{%d,}" % min_length, data)
-        return b"\n".join(strings).decode(errors="ignore")
+                for index, match in enumerate(matches):
+                    text_bytes = match.group(0)
+                    is_tail_match = index == len(matches) - 1 and match.end() == len(data) and scanned < bytes_to_scan
+                    if is_tail_match:
+                        carry = text_bytes[-512:]
+                        continue
 
-    except Exception as e:
-        return f"Binary parsing error: {str(e)}"
+                    text = text_bytes.decode(errors="ignore").strip()
+                    if not text or not _binary_string_is_relevant(text):
+                        continue
+
+                    if len(text) > 500:
+                        text = text[:500] + "..."
+
+                    projected_size = total_chars + len(text) + 1
+                    if projected_size > MAX_TEXT_CHARS:
+                        break
+
+                    matched_strings.append(text)
+                    total_chars = projected_size
+
+                if total_chars >= MAX_TEXT_CHARS:
+                    break
+
+        if not matched_strings:
+            matched_strings.append("[BINARY SCAN COMPLETED - NO TOR-RELEVANT STRINGS FOUND]")
+
+        if file_size > bytes_to_scan:
+            matched_strings.append("[TRUNCATED LARGE BINARY FILE - PARTIAL SCAN COMPLETED]")
+
+        return "\n".join(matched_strings)[:MAX_TEXT_CHARS]
+
+    except Exception as exc:
+        return f"Binary parsing error: {exc}"
 
 
-# ============================================
-# MAIN PARSER
-# ============================================
+# Main parser.
 def parse_forensic_file(filepath):
     ext = os.path.splitext(filepath)[1].lower()
     abs_path = os.path.abspath(filepath)
     stats = os.stat(filepath)
 
     timestamps = {
-        "modified": datetime.datetime.fromtimestamp(stats.st_mtime).strftime('%Y-%m-%d %H:%M:%S'),
-        "accessed": datetime.datetime.fromtimestamp(stats.st_atime).strftime('%Y-%m-%d %H:%M:%S'),
-        "created": datetime.datetime.fromtimestamp(stats.st_ctime).strftime('%Y-%m-%d %H:%M:%S')
+        "modified": datetime.datetime.fromtimestamp(stats.st_mtime).strftime("%Y-%m-%d %H:%M:%S"),
+        "accessed": datetime.datetime.fromtimestamp(stats.st_atime).strftime("%Y-%m-%d %H:%M:%S"),
+        "created": datetime.datetime.fromtimestamp(stats.st_ctime).strftime("%Y-%m-%d %H:%M:%S"),
     }
 
     content = ""
     evidence_type = "DISK"
 
     try:
-        # ============================================
-        # 1. HTML
-        # ============================================
         if ext in [".html", ".htm"]:
             content = read_text_safely(filepath, strip_html=True)
-
-        # ============================================
-        # 2. TEXT FILES
-        # ============================================
         elif ext in [".txt", ".log", ".csv"]:
             content = read_text_safely(filepath)
-
-        # ============================================
-        # 3. STRUCTURED FILES
-        # ============================================
         elif ext == ".json":
             content = read_json_safely(filepath)
-
         elif ext in [".xlsx", ".xls"]:
             content = read_excel_safely(filepath)
-
         elif ext == ".docx":
             content = read_docx_safely(filepath)
-
-        # ============================================
-        # 🔥 4. MEMORY / RAW BINARIES (SAFE)
-        # ============================================
         elif ext in [".raw", ".mem", ".dmp", ".bin"]:
             content = extract_strings_from_binary(filepath)
             evidence_type = "MEMORY"
-
-        # ============================================
-        # 🔥 5. E01 (DO NOT PARSE DIRECTLY)
-        # ============================================
         elif ext == ".e01":
             content = "[E01 IMAGE DETECTED - USE AUTOPSY FOR ANALYSIS]"
             evidence_type = "DISK"
-
-        # ============================================
-        # 🔥 6. PCAP (handled separately)
-        # ============================================
         elif ext in [".pcap", ".pcapng"]:
             content = ""
             evidence_type = "PCAP"
-
         else:
             content = extract_strings_from_binary(filepath)
-
-    except Exception as e:
-        content = f"Parsing Error: {str(e)}"
+    except Exception as exc:
+        content = f"Parsing Error: {exc}"
 
     content_lower = content.lower()
 
-    # ============================================
-    # INTELLIGENT CLASSIFICATION
-    # ============================================
     disk_signatures = ["/img_", "/vol_", "partition", "autopsy", "e01"]
     disk_artifact_signatures = [
         "prefetch",
@@ -212,23 +241,17 @@ def parse_forensic_file(filepath):
 
     if evidence_type == "PCAP":
         pass
-
     elif evidence_type == "MEMORY":
         pass
-
     elif ext == ".e01":
         pass
-
-    elif any(sig in content_lower for sig in disk_signatures):
+    elif any(signature in content_lower for signature in disk_signatures):
         evidence_type = "DISK"
-
-    elif any(sig in content_lower for sig in disk_artifact_signatures):
+    elif any(signature in content_lower for signature in disk_artifact_signatures):
         evidence_type = "DISK"
-
     elif any(header in content_lower for header in memory_headers):
         evidence_type = "MEMORY"
-
-    elif any(sig in content_lower for sig in network_signatures):
+    elif any(signature in content_lower for signature in network_signatures):
         evidence_type = "NETWORK"
 
     return {
@@ -236,5 +259,5 @@ def parse_forensic_file(filepath):
         "path": abs_path,
         "filename": os.path.basename(filepath),
         "timestamps": timestamps,
-        "evidence_type": evidence_type
+        "evidence_type": evidence_type,
     }

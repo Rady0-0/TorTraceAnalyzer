@@ -6,6 +6,7 @@ TorTraceAnalyzer is a Python-based digital forensics tool for detecting and corr
 
 - Parses evidence files and folders recursively.
 - Runs multi-layer analysis across memory, system, network, application, and transport indicators.
+- Routes `.pcap` and `.pcapng` evidence into both the network and transport layers.
 - Normalizes detections into a single pipeline for correlation and FCI scoring.
 - Reconstructs a MACB-style timeline from available timestamps.
 - Exports reports to TXT, CSV, Excel, JSON, and PDF.
@@ -30,7 +31,9 @@ Accepted file types:
 Notes:
 
 - `.e01` is recognized as a disk-image indicator but is not deeply parsed directly.
-- `.pcap` and `.pcapng` are analyzed offline from the file itself. Live sniffing is not required.
+- `.pcap` and `.pcapng` are analyzed offline from the file itself and now contribute to both `NETWORK` and `TRANSPORT`.
+- `.raw`, `.mem`, `.dmp`, and `.bin` are supported as memory-style evidence through chunked string extraction.
+- Best memory results come from raw memory dumps, process dumps, exported `strings` output, or Volatility text/report output that still contains Tor-related process names, command lines, or `.onion` references.
 - For best results, use exported reports from tools such as Wireshark, Volatility, FTK Imager, or Autopsy.
 
 ## Analysis pipeline
@@ -71,7 +74,8 @@ Each detection is normalized into the same structure:
 - The timeline is intentionally built from `System` and `Application` artifact timestamps only.
 - `Created` and `Accessed` appear only when the tool can extract artifact-level timestamps from the evidence itself. It does not use the uploaded report file timestamp as a substitute.
 - `Network`, `Transport`, and `Memory` detections do not drive the timeline because uploaded report-file times can be misleading.
-- Selecting a row in any forensic layer tab shows the artifact path, evidence match, message, and timestamps in a dedicated details panel.
+- Selecting a row in any forensic layer tab shows the artifact path, evidence match, and message in a dedicated details panel.
+- Timestamp fields are only shown for layers where artifact-level timestamps are meaningful, mainly `SYSTEM`, `APPLICATION`, and `MEMORY`.
 - Selecting a timeline row shows the corresponding artifact path, evidence match, and timestamp bundle.
 - `Evidence Pie` is based on the number of detections per layer in the current case.
 - `Activity Matrix` summarizes how many `Modified`, `Created`, and `Accessed` events were reconstructed per layer.
@@ -156,7 +160,7 @@ gui.py                  desktop interface
 main.py                 orchestration pipeline
 file_parser.py          evidence parsing and classification
 *_analysis.py           per-layer analyzers
-pcap_transport_analysis.py  packet capture analysis
+pcap_transport_analysis.py  packet capture analysis for network and transport layers
 artifact_correlation.py correlation logic
 risk_scoring.py         FCI scoring
 timeline_reconstruction.py timeline builder
