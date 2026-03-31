@@ -277,6 +277,7 @@ def run_analysis(inputs, event_callback=None, case_info=None):
             correlation.get("summary", ""),
             timeline,
             case_info=case_info,
+            correlation_items=correlation.get("correlations", []),
         )
         result["report_path"] = report_path
     except Exception as exc:

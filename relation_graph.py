@@ -20,13 +20,24 @@ def build_relationship_figure(detections):
         graph.add_node(artifact, type="artifact")
         graph.add_edge(layer, artifact)
 
-    positions = nx.spring_layout(graph, seed=42, k=1.1)
+    layer_nodes = sorted(node for node, data in graph.nodes(data=True) if data.get("type") == "layer")
+    artifact_nodes = sorted(node for node, data in graph.nodes(data=True) if data.get("type") == "artifact")
+
+    positions = {}
+    layer_count = max(len(layer_nodes), 1)
+    artifact_count = max(len(artifact_nodes), 1)
+
+    for index, node in enumerate(layer_nodes):
+        y_pos = 1 - (index / max(layer_count - 1, 1)) if layer_count > 1 else 0.5
+        positions[node] = (0.15, y_pos)
+
+    for index, node in enumerate(artifact_nodes):
+        y_pos = 1 - (index / max(artifact_count - 1, 1)) if artifact_count > 1 else 0.5
+        positions[node] = (0.85, y_pos)
+
     figure, axis = plt.subplots(figsize=(9, 5.5))
     figure.patch.set_facecolor("#111827")
     axis.set_facecolor("#111827")
-
-    layer_nodes = [node for node, data in graph.nodes(data=True) if data.get("type") == "layer"]
-    artifact_nodes = [node for node, data in graph.nodes(data=True) if data.get("type") == "artifact"]
 
     nx.draw_networkx_nodes(graph, positions, nodelist=layer_nodes, node_color=LAYER_COLOR, node_size=2600, ax=axis)
     nx.draw_networkx_nodes(graph, positions, nodelist=artifact_nodes, node_color=ARTIFACT_COLOR, node_size=2100, ax=axis)
@@ -34,6 +45,8 @@ def build_relationship_figure(detections):
     nx.draw_networkx_labels(graph, positions, ax=axis, font_size=8, font_color="white")
 
     axis.set_title("Artifact Relationship Map", color="white", fontsize=13)
+    axis.text(0.15, 1.04, "Forensic Layers", color="#bcd3ff", fontsize=10, fontweight="bold", ha="center", transform=axis.transAxes)
+    axis.text(0.85, 1.04, "Detected Artifacts", color="#bbf7d0", fontsize=10, fontweight="bold", ha="center", transform=axis.transAxes)
     axis.axis("off")
     figure.tight_layout()
     return figure

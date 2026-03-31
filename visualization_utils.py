@@ -79,7 +79,7 @@ def build_detection_pie_figure(detections):
         startangle=110,
         textprops={"color": "white"},
     )
-    axis.set_title("Detection Distribution by Layer", color="white", fontsize=13)
+    axis.set_title("Detections by Forensic Layer", color="white", fontsize=13)
     figure.tight_layout()
     return figure
 

@@ -58,12 +58,18 @@ Each detection is normalized into the same structure:
 
 - `DASHBOARD`: Overall summary, FCI, correlation, detected artifacts, engine messages.
 - `MEMORY`, `SYSTEM`, `NETWORK`, `APPLICATION`, `TRANSPORT`: Layer-specific findings.
-- `TIMELINE`: Reconstructed events filtered by date and event type.
-- `Timeline Graph`: Plots timeline events by layer over time.
-- `Event Pie`: Shows the distribution of timeline event types.
+- `TIMELINE`: Reconstructed artifact timeline filtered by date.
+- `Timeline Graph`: Shows timeline events as horizontal bars.
+- `Evidence Pie`: Shows the distribution of detections by forensic layer.
 - `Relations`: Shows which artifacts came from which forensic layers.
 
-The `From date` and `To date` controls only filter the Timeline tab. They do not change the forensic scan itself.
+## Interface notes
+
+- `From date` and `To date` filter the `TIMELINE` tab and `Timeline Graph` only. They do not change the forensic scan.
+- The timeline is intentionally built from `System` and `Application` artifact timestamps only.
+- `Network`, `Transport`, and `Memory` detections do not drive the timeline because uploaded report-file times can be misleading.
+- `Evidence Pie` is based on the number of detections per layer in the current case.
+- `Relations` maps each detected artifact to the layer that produced it.
 
 ## Running from source
 

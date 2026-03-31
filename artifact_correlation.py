@@ -25,6 +25,11 @@ def correlate_artifacts(layer_hits, all_detections):
         "POSSIBLE TOR" in name or "TOR-LIKE" in name
         for name in names
     )
+    has_application = any(
+        indicator in name
+        for name in names
+        for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT")
+    )
     has_vpn = any("VPN" in name for name in names)
     has_transport = any(
         "DATA FLOW" in name or "ENCRYPTED TRANSPORT" in name or "TCP DATA FLOW" in name
@@ -40,6 +45,15 @@ def correlate_artifacts(layer_hits, all_detections):
                 "HIGH",
                 "Tor execution evidence",
                 "System or memory artifacts suggest Tor was executed on the device.",
+            )
+        )
+
+    if has_application:
+        correlations.append(
+            _item(
+                "HIGH",
+                "Tor application artifacts",
+                "Tor Browser or Tor configuration artifacts were identified in disk-style evidence.",
             )
         )
 
@@ -111,6 +125,14 @@ def correlate_artifacts(layer_hits, all_detections):
                 "CRITICAL",
                 "Execution plus transfer evidence",
                 "Tor execution evidence appeared together with transport or packet-transfer evidence in the same case.",
+            )
+        )
+    elif has_application and (has_direct_tor or has_behavioral):
+        correlations.append(
+            _item(
+                "HIGH",
+                "Application plus network support",
+                "Tor application artifacts are reinforced by separate network-side indicators in the same case.",
             )
         )
     elif has_behavioral and (has_transport or has_pcap_behavior):

@@ -143,6 +143,16 @@ def parse_forensic_file(filepath):
     # INTELLIGENT CLASSIFICATION
     # ============================================
     disk_signatures = ["/img_", "/vol_", "partition", "autopsy", "e01"]
+    disk_artifact_signatures = [
+        "prefetch",
+        "places.sqlite",
+        "cookies.sqlite",
+        "torrc",
+        "usbstor",
+        "\\windows\\",
+        "\\users\\",
+        "/users/",
+    ]
     memory_headers = ["volatility foundation", "pslist", "netscan"]
     network_signatures = ["source ip", "destination ip", "protocol", "packet"]
 
@@ -156,6 +166,9 @@ def parse_forensic_file(filepath):
         pass
 
     elif any(sig in content_lower for sig in disk_signatures):
+        evidence_type = "DISK"
+
+    elif any(sig in content_lower for sig in disk_artifact_signatures):
         evidence_type = "DISK"
 
     elif any(header in content_lower for header in memory_headers):

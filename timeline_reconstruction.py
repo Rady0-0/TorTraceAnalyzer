@@ -73,8 +73,5 @@ def build_timeline(all_detections):
 
     return {
         "events": events,
-        "summary": (
-            f"{len(events)} timeline events reconstructed from system/application artifact timestamps. "
-            "Network and transport detections are excluded to avoid misleading file-upload times."
-        ),
+        "summary": f"{len(events)} timeline events reconstructed from artifact timestamps.",
     }

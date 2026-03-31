@@ -11,6 +11,9 @@ $packageDir = Join-Path $releaseRoot ("TorTraceAnalyzer_Portable_" + $timestamp)
 $sampleDir = Join-Path $packageDir "sample_inputs"
 $zipPath = $packageDir + ".zip"
 
+if (-not (Test-Path $releaseRoot)) { New-Item -ItemType Directory -Force $releaseRoot | Out-Null }
+Get-ChildItem $releaseRoot -Force -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "TorTraceAnalyzer_Portable_*" } | Remove-Item -Recurse -Force
+
 if (Test-Path $packageDir) { Remove-Item -Recurse -Force $packageDir }
 New-Item -ItemType Directory -Force $packageDir | Out-Null
 New-Item -ItemType Directory -Force $sampleDir | Out-Null
@@ -21,7 +24,7 @@ Copy-Item .\samples\* $sampleDir -Recurse -Force
 
 if (Test-Path $zipPath) { Remove-Item -Force $zipPath }
 Compress-Archive -Path (Join-Path $packageDir "*") -DestinationPath $zipPath
+Remove-Item -Recurse -Force $packageDir
 
 Write-Host ""
-Write-Host "Portable package created: $packageDir"
 Write-Host "Zip package created: $zipPath"

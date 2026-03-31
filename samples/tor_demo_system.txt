@@ -1,4 +1,4 @@
-Tor Browser detected in prefetch output
-USB history shows removable storage usage
-places.sqlite path observed under Tor Browser profile
-port 9050 observed in related notes
+2026-02-03 08:00:00 C:\Windows\Prefetch\tor.exe-12345678.pf
+2026-02-02 09:10:00 C:\Users\Analyst\Tor Browser\Browser\TorBrowser\Data\Browser\profile.default\places.sqlite
+2026-02-02 09:11:00 C:\Users\Analyst\Tor Browser\Browser\TorBrowser\Data\Browser\profile.default\cookies.sqlite
+2026-02-01 18:20:00 HKLM\SYSTEM\CurrentControlSet\Enum\USBSTOR\Disk&Ven_SanDisk&Prod_Cruzer

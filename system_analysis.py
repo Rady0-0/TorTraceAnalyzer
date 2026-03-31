@@ -1,31 +1,58 @@
 import re
 
 def extract_internal_metadata(content, default_ts, artifact_name):
-    idx = content.find(artifact_name.lower())
+    time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
+    path_pattern = r'([a-zA-Z]:\\[\\\w \.\-\(\)]+|/[\w \.\-\(\)/]+)'
+    artifact_lower = artifact_name.lower()
+
+    for line in content.splitlines():
+        if artifact_lower not in line.lower():
+            continue
+
+        times = re.findall(time_pattern, line)
+        paths = re.findall(path_pattern, line)
+        raw_path = "Path not found"
+        for p in paths:
+            if artifact_lower in p.lower():
+                raw_path = p
+                break
+        if raw_path == "Path not found" and paths:
+            raw_path = paths[0]
+        return {
+            "time": times[0] if times else default_ts.get('modified', 'N/A'),
+            "path": raw_path
+        }
+
+    idx = content.find(artifact_lower)
     if idx == -1:
         return {"time": "N/A", "path": "Path not found"}
-    
-    window = content[max(0, idx-500): min(len(content), idx+500)]
-    
-    time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
-    times = re.findall(time_pattern, window)
-    
-    path_pattern = r'([a-zA-Z]:\\[\\\w \.\-\(\)]+|/[\w \.\-\(\)/]+)'
+
+    window_start = max(0, idx-500)
+    window = content[window_start: min(len(content), idx+500)]
+    times = list(re.finditer(time_pattern, window))
     paths = re.findall(path_pattern, window)
-    
+
     raw_path = "Path not found"
 
     for p in paths:
-        if artifact_name.lower() in p.lower():
+        if artifact_lower in p.lower():
             raw_path = p
             break
 
-# fallback
+    # fallback
     if raw_path == "Path not found" and paths:
         raw_path = paths[0]
+
+    chosen_time = default_ts.get('modified', 'N/A')
+    relative_idx = idx - window_start
+    preceding_times = [match.group(1) for match in times if match.start() <= relative_idx]
+    if preceding_times:
+        chosen_time = preceding_times[-1]
+    elif times:
+        chosen_time = times[0].group(1)
     
     return {
-        "time": times[0] if times else default_ts.get('modified', 'N/A'),
+        "time": chosen_time,
         "path": raw_path
     }
 

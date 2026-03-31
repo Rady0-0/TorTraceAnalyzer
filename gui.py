@@ -1,6 +1,6 @@
 import os
+import multiprocessing as mp
 import queue
-import threading
 import time
 import traceback
 import tkinter as tk
@@ -32,6 +32,19 @@ CASE_FIELDS = [
 ]
 
 
+def run_analysis_process(selected_paths, case_info, output_queue):
+    try:
+        from main import run_analysis
+
+        def event_callback(event):
+            output_queue.put(event)
+
+        result = run_analysis(selected_paths, event_callback=event_callback, case_info=case_info)
+        output_queue.put({"type": "complete", "result": result})
+    except Exception as exc:
+        output_queue.put({"type": "worker_error", "message": str(exc), "traceback": traceback.format_exc()})
+
+
 class TorTraceGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
@@ -44,7 +57,8 @@ class TorTraceGUI(ctk.CTk):
         self.test_mode = os.environ.get("TORTRACE_TEST_MODE") == "1"
         self.startup_complete = False
         self.case_info = self._default_case_info()
-        self.worker_thread = None
+        self.analysis_process = None
+        self.mp_context = mp.get_context("spawn")
         self.current_figure = None
         self.graph_canvas = None
         self.correlation_items = []
@@ -66,8 +80,6 @@ class TorTraceGUI(ctk.CTk):
         self.dashboard_messages = []
         self.output_queue = queue.Queue()
 
-        self.view_help = tk.StringVar(value="Run analysis to unlock the visual views. Timeline Graph uses timeline-relevant artifact timestamps, Evidence Pie shows detections by layer, and Relations maps layers to artifacts.")
-        self.date_help = tk.StringVar(value="Timeline filters affect the TIMELINE tab and Timeline Graph. Format: YYYY-MM-DD.")
         self.current_file = tk.StringVar(value="Current file: Waiting to start")
         self.status = tk.StringVar(value="READY")
         self.timer = tk.StringVar(value="Elapsed: 0s")
@@ -121,48 +133,49 @@ class TorTraceGUI(ctk.CTk):
 
     def build_ui(self):
         header = ctk.CTkFrame(self, corner_radius=16)
-        header.pack(fill="x", padx=18, pady=(16, 10))
+        header.pack(fill="x", padx=18, pady=(16, 8))
         brand = ctk.CTkFrame(header, fg_color="transparent")
-        brand.pack(side="left", fill="x", expand=True, padx=16, pady=14)
+        brand.pack(side="left", fill="x", expand=True, padx=16, pady=12)
         if self.logo_image_small:
             ctk.CTkLabel(brand, image=self.logo_image_small, text="").pack(side="left", padx=(0, 12))
         brand_text = ctk.CTkFrame(brand, fg_color="transparent")
         brand_text.pack(side="left", fill="x", expand=True)
         ctk.CTkLabel(brand_text, text="TOR TRACE ANALYZER", font=ctk.CTkFont(size=28, weight="bold")).pack(anchor="w")
-        ctk.CTkLabel(brand_text, text="Multi-layer Tor forensic detection, correlation, timeline reconstruction, and reporting", text_color="#a5b1c2").pack(anchor="w", pady=(4, 0))
+        ctk.CTkLabel(
+            brand_text,
+            text="Multi-layer forensic analysis for Tor-related evidence",
+            text_color="#a5b1c2",
+        ).pack(anchor="w", pady=(4, 0))
         self.case_badge = ctk.CTkLabel(header, textvariable=self.case_summary, justify="right", font=ctk.CTkFont(size=13, weight="bold"), text_color="#dfe6e9")
-        self.case_badge.pack(side="right", padx=18, pady=18)
+        self.case_badge.pack(side="right", padx=18, pady=16)
 
         self.control_shell = ctk.CTkFrame(self, corner_radius=16)
-        self.control_shell.pack(fill="x", padx=18, pady=(0, 10))
-        self.controls_container = ctk.CTkFrame(self.control_shell, fg_color="transparent")
-        self.controls_container.pack(fill="x", padx=12, pady=12)
-        self.control_frames = {}
+        self.control_shell.pack(fill="x", padx=18, pady=(0, 8))
+        self.controls_container = ctk.CTkTabview(self.control_shell, corner_radius=14, height=138)
+        self.controls_container.pack(fill="x", padx=12, pady=10)
         self._build_control_frames()
 
         action_frame = ctk.CTkFrame(self, corner_radius=16)
-        action_frame.pack(fill="x", padx=18, pady=(0, 10))
+        action_frame.pack(fill="x", padx=18, pady=(0, 8))
         self.path_entry = ctk.CTkEntry(action_frame, placeholder_text="Choose individual evidence files or an evidence folder")
-        self.path_entry.pack(side="left", fill="x", expand=True, padx=12, pady=12)
+        self.path_entry.pack(side="left", fill="x", expand=True, padx=12, pady=10)
         self.files_button = ctk.CTkButton(action_frame, text="Files", command=self.add_files, width=110)
-        self.files_button.pack(side="left", padx=(0, 8), pady=12)
+        self.files_button.pack(side="left", padx=(0, 8), pady=10)
         self.folder_button = ctk.CTkButton(action_frame, text="Folder", command=self.add_folder, width=110)
-        self.folder_button.pack(side="left", padx=(0, 8), pady=12)
+        self.folder_button.pack(side="left", padx=(0, 8), pady=10)
         self.run_button = ctk.CTkButton(action_frame, text="Run Analysis", command=self.start_analysis, width=140, fg_color="#1f8b4c", hover_color="#176d3c")
-        self.run_button.pack(side="left", padx=(0, 12), pady=12)
+        self.run_button.pack(side="left", padx=(0, 12), pady=10)
 
         status_card = ctk.CTkFrame(self, corner_radius=16)
-        status_card.pack(fill="x", padx=18, pady=(0, 10))
+        status_card.pack(fill="x", padx=18, pady=(0, 8))
         self.progress = ctk.CTkProgressBar(status_card)
-        self.progress.pack(fill="x", padx=14, pady=(14, 8))
+        self.progress.pack(fill="x", padx=14, pady=(12, 8))
         self.progress.set(0)
         status_row = ctk.CTkFrame(status_card, fg_color="transparent")
         status_row.pack(fill="x", padx=14, pady=(0, 10))
         ctk.CTkLabel(status_row, textvariable=self.status, text_color="#e6edf3").pack(side="left", padx=(0, 20))
         ctk.CTkLabel(status_row, textvariable=self.timer, text_color="#a5b1c2").pack(side="left", padx=(0, 20))
         ctk.CTkLabel(status_row, textvariable=self.current_file, text_color="#1dd1a1").pack(side="left")
-        ctk.CTkLabel(self, textvariable=self.date_help, text_color="#8ea6b5").pack(anchor="w", padx=24, pady=(0, 8))
-
         workspace = ctk.CTkFrame(self, fg_color="transparent")
         workspace.pack(fill="both", expand=True, padx=18, pady=(0, 18))
         left_panel = ctk.CTkFrame(workspace, corner_radius=16)
@@ -189,30 +202,33 @@ class TorTraceGUI(ctk.CTk):
             tab.tag_config("muted", foreground="#94a3b8")
         self.output = self.tabs["dashboard"]
 
-        visual_header = ctk.CTkFrame(right_panel, fg_color="transparent")
-        visual_header.pack(fill="x", padx=14, pady=(14, 8))
+        self.side_workspace = ctk.CTkTabview(right_panel)
+        self.side_workspace.pack(fill="both", expand=True, padx=14, pady=14)
+        visuals_tab = self.side_workspace.add("VISUALS")
+        notes_tab = self.side_workspace.add("NOTES")
+
+        visual_header = ctk.CTkFrame(visuals_tab, fg_color="transparent")
+        visual_header.pack(fill="x", padx=8, pady=(8, 8))
         ctk.CTkLabel(visual_header, text="Visual Evidence Panel", font=ctk.CTkFont(size=18, weight="bold")).pack(anchor="w")
-        self.graph_label = ctk.CTkLabel(visual_header, text="Choose a visual view after analysis", font=ctk.CTkFont(size=13, weight="bold"), text_color="#cbd5e1")
+        self.graph_label = ctk.CTkLabel(visual_header, text="No visual selected", font=ctk.CTkFont(size=13, weight="bold"), text_color="#cbd5e1")
         self.graph_label.pack(anchor="w", pady=(4, 0))
-        self.graph_help_label = ctk.CTkLabel(right_panel, textvariable=self.view_help, justify="left", wraplength=420, text_color="#9fb2c3")
-        self.graph_help_label.pack(anchor="w", padx=14, pady=(0, 10))
-        self.graph_canvas_frame = ctk.CTkFrame(right_panel, corner_radius=14)
-        self.graph_canvas_frame.pack(fill="both", expand=True, padx=14, pady=(0, 12))
-        ctk.CTkLabel(right_panel, text="Investigator Notes", font=ctk.CTkFont(size=13, weight="bold")).pack(anchor="w", padx=14, pady=(0, 6))
-        self.notes_box = ctk.CTkTextbox(right_panel, height=220)
-        self.notes_box.pack(fill="x", padx=14, pady=(0, 14))
+        self.graph_canvas_frame = ctk.CTkFrame(visuals_tab, corner_radius=14)
+        self.graph_canvas_frame.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+
+        ctk.CTkLabel(notes_tab, text="Investigator Notes", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=10, pady=(10, 8))
+        self.notes_box = ctk.CTkTextbox(notes_tab)
+        self.notes_box.pack(fill="both", expand=True, padx=10, pady=(0, 10))
         self.notes_box.insert("1.0", "Investigator notes and conclusions...")
-        self._show_visual_placeholder("Run analysis to populate the visual evidence panel.")
+        self.side_workspace.set("VISUALS")
+        self._show_visual_placeholder("Run analysis and choose a visual.")
 
     def _build_control_frames(self):
         self.search_var = tk.StringVar()
         self.filter_var = tk.StringVar(value="ALL")
 
-        case_frame = ctk.CTkFrame(self.controls_container, corner_radius=14)
-        case_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ctk.CTkLabel(case_frame, text="Case & Search", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
+        case_frame = self.controls_container.add("CASE")
         case_row_1 = ctk.CTkFrame(case_frame, fg_color="transparent")
-        case_row_1.pack(fill="x", padx=12, pady=(0, 8))
+        case_row_1.pack(fill="x", padx=12, pady=(10, 8))
         self.case_select = ctk.CTkOptionMenu(case_row_1, values=get_case_names() or ["No Cases"], command=self.load_selected_case, width=180)
         self.case_select.pack(side="left", padx=(0, 8))
         self.manage_case_button = ctk.CTkButton(case_row_1, text="Manage Case", command=self.show_case_manager, width=105)
@@ -223,15 +239,10 @@ class TorTraceGUI(ctk.CTk):
         self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.search_button = ctk.CTkButton(case_row_2, text="Search", command=self.search_text, width=88)
         self.search_button.pack(side="left")
-        self.case_meta_label = ctk.CTkLabel(case_frame, text="Load a saved case or search through the current investigation output.", text_color="#8ea6b5", wraplength=360, justify="left")
-        self.case_meta_label.pack(anchor="w", padx=12, pady=(0, 10))
-        self.control_frames["Case & Search"] = case_frame
 
-        timeline_frame = ctk.CTkFrame(self.controls_container, corner_radius=14)
-        timeline_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
-        ctk.CTkLabel(timeline_frame, text="Timeline Filters", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
+        timeline_frame = self.controls_container.add("TIMELINE")
         timeline_row_1 = ctk.CTkFrame(timeline_frame, fg_color="transparent")
-        timeline_row_1.pack(fill="x", padx=12, pady=(0, 8))
+        timeline_row_1.pack(fill="x", padx=12, pady=(10, 8))
         self.start_date = ctk.CTkEntry(timeline_row_1, width=130, placeholder_text="From YYYY-MM-DD")
         self.start_date.pack(side="left", padx=(0, 8))
         self.end_date = ctk.CTkEntry(timeline_row_1, width=130, placeholder_text="To YYYY-MM-DD")
@@ -244,16 +255,10 @@ class TorTraceGUI(ctk.CTk):
         self.smart_btn.pack(side="left", padx=(0, 8))
         self.timeline_refresh_button = ctk.CTkButton(timeline_row_2, text="Refresh Timeline", command=self.show_timeline, width=120)
         self.timeline_refresh_button.pack(side="left")
-        ctk.CTkLabel(timeline_frame, text="Timeline only uses system/application artifact timestamps. Network and transport entries are excluded.", text_color="#8ea6b5", wraplength=360, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
-        self.control_frames["Timeline Filters"] = timeline_frame
 
-        visual_frame = ctk.CTkFrame(self.controls_container, corner_radius=14)
-        visual_frame.pack(side="left", fill="both", expand=True)
-        ctk.CTkLabel(visual_frame, text="Visuals & Export", font=ctk.CTkFont(size=14, weight="bold")).pack(anchor="w", padx=12, pady=(10, 4))
+        visual_frame = self.controls_container.add("VISUALS")
         visual_row_1 = ctk.CTkFrame(visual_frame, fg_color="transparent")
-        visual_row_1.pack(fill="x", padx=12, pady=(0, 8))
-        self.view_guide_button = ctk.CTkButton(visual_row_1, text="Explain Views", command=self.show_view_guide, width=105)
-        self.view_guide_button.pack(side="left", padx=(0, 8))
+        visual_row_1.pack(fill="x", padx=12, pady=(10, 8))
         self.timeline_graph_button = ctk.CTkButton(visual_row_1, text="Timeline Graph", command=self.show_graph, width=115)
         self.timeline_graph_button.pack(side="left", padx=(0, 8))
         self.event_pie_button = ctk.CTkButton(visual_row_1, text="Evidence Pie", command=self.show_pie_chart, width=105)
@@ -267,11 +272,6 @@ class TorTraceGUI(ctk.CTk):
         self.format_menu.pack(side="left", padx=(0, 8))
         self.export_button = ctk.CTkButton(visual_row_2, text="Export Report", command=self.export, width=120)
         self.export_button.pack(side="left")
-        ctk.CTkLabel(visual_frame, text="Evidence Pie is based on detection counts by layer. PDF export includes all generated visuals.", text_color="#8ea6b5", wraplength=360, justify="left").pack(anchor="w", padx=12, pady=(0, 10))
-        self.control_frames["Visuals & Export"] = visual_frame
-
-    def _show_control_panel(self, panel_name):
-        return
     def _start_splash_sequence(self):
         splash = ctk.CTkToplevel(self)
         splash.overrideredirect(True)
@@ -325,9 +325,13 @@ class TorTraceGUI(ctk.CTk):
         if self.logo_image_large:
             ctk.CTkLabel(left, image=self.logo_image_large, text="").pack(pady=(32, 14))
         ctk.CTkLabel(left, text="Case Workspace", font=ctk.CTkFont(size=24, weight="bold")).pack(padx=18)
-        ctk.CTkLabel(left, text="Start with a new case or reopen a previous investigation. Case details flow into saved case records and exported reports.", wraplength=260, justify="left", text_color="#9fb2c3").pack(padx=20, pady=(14, 18))
-        bullet_text = "Included case metadata:\n- Case name and ID\n- Investigator\n- Organization and department\n- Contact email\n- Case description"
-        ctk.CTkLabel(left, text=bullet_text, justify="left", text_color="#d5dee7").pack(anchor="w", padx=24)
+        ctk.CTkLabel(
+            left,
+            text="Create a new investigation or reopen a saved case.",
+            wraplength=260,
+            justify="left",
+            text_color="#9fb2c3",
+        ).pack(padx=20, pady=(14, 10))
 
         right = ctk.CTkFrame(shell, corner_radius=16)
         right.pack(side="left", fill="both", expand=True, pady=14)
@@ -454,9 +458,6 @@ class TorTraceGUI(ctk.CTk):
         investigator = self.case_info.get("investigator") or "Unassigned Investigator"
         case_id = self.case_info.get("case_id") or "No ID"
         self.case_summary.set(f"Case: {case_name}\n{case_id} | {investigator}")
-        if hasattr(self, "case_meta_label"):
-            org = self.case_info.get("organization") or "No organization"
-            self.case_meta_label.configure(text=f"{case_name} | {org}")
 
     def _case_has_saved_results(self, case):
         return bool(case and (case.get("all_detections") or case.get("layer_results") or case.get("timeline")))
@@ -491,17 +492,27 @@ class TorTraceGUI(ctk.CTk):
 
     def _set_busy_state(self, running):
         state = "disabled" if running else "normal"
-        for widget_name in ["files_button", "folder_button", "run_button", "manage_case_button", "search_button", "timeline_graph_button", "event_pie_button", "relation_button", "export_button", "view_guide_button", "case_select", "timeline_refresh_button", "smart_btn"]:
+        for widget_name in [
+            "files_button",
+            "folder_button",
+            "run_button",
+            "manage_case_button",
+            "search_button",
+            "timeline_graph_button",
+            "event_pie_button",
+            "relation_button",
+            "export_button",
+            "case_select",
+            "timeline_refresh_button",
+            "smart_btn",
+            "format_menu",
+        ]:
             widget = getattr(self, widget_name, None)
             if widget is not None:
                 try:
                     widget.configure(state=state)
                 except Exception:
                     pass
-        try:
-            self.control_switch.configure(state=state)
-        except Exception:
-            pass
 
     def _clear_visual_canvas(self):
         if self.current_figure is not None:
@@ -513,13 +524,16 @@ class TorTraceGUI(ctk.CTk):
 
     def _show_visual_placeholder(self, message):
         self._clear_visual_canvas()
-        placeholder = ctk.CTkLabel(self.graph_canvas_frame, text=message, text_color="#8ea6b5", justify="center", wraplength=380)
+        try:
+            self.side_workspace.set("VISUALS")
+        except Exception:
+            pass
+        placeholder = ctk.CTkLabel(self.graph_canvas_frame, text=message, text_color="#8ea6b5", justify="center", wraplength=500)
         placeholder.pack(expand=True)
 
-    def _display_figure(self, figure, title, help_text):
+    def _display_figure(self, figure, title):
         if figure is None:
             self.graph_label.configure(text=title)
-            self.view_help.set(help_text)
             self._show_visual_placeholder("No visual data available for this view.")
             return
         self._clear_visual_canvas()
@@ -528,7 +542,10 @@ class TorTraceGUI(ctk.CTk):
         self.graph_canvas.draw()
         self.graph_canvas.get_tk_widget().pack(fill="both", expand=True)
         self.graph_label.configure(text=title)
-        self.view_help.set(help_text)
+        try:
+            self.side_workspace.set("VISUALS")
+        except Exception:
+            pass
 
     def _update_selected_path_entry(self):
         if not self.selected_paths:
@@ -546,6 +563,11 @@ class TorTraceGUI(ctk.CTk):
                     self.after_cancel(after_id)
                 except Exception:
                     pass
+        if self.analysis_process is not None and self.analysis_process.is_alive():
+            try:
+                self.analysis_process.terminate()
+            except Exception:
+                pass
         try:
             self.destroy()
         except Exception:
@@ -595,8 +617,7 @@ class TorTraceGUI(ctk.CTk):
         self.status.set("Starting analysis...")
         self.timer.set("Elapsed: 0s")
         self.current_file.set("Current file: Preparing evidence list...")
-        self.view_help.set("Analysis is running. Visual views will populate when results are ready.")
-        self._show_visual_placeholder("Analysis is running. Visualizations will appear here when the run finishes.")
+        self._show_visual_placeholder("Preparing visuals...")
 
         self.timeline_data = {}
         self.all_findings = []
@@ -607,7 +628,7 @@ class TorTraceGUI(ctk.CTk):
         self.correlation_items = []
         self.report_path = ""
         self.dashboard_messages = []
-        self.output_queue = queue.Queue()
+        self.output_queue = self.mp_context.Queue()
         self.latest_evidence_files = []
 
         for key in self.layer_data:
@@ -617,8 +638,12 @@ class TorTraceGUI(ctk.CTk):
 
         self.tabview.set("DASHBOARD")
         self.write("dashboard", "Starting analysis...", "medium")
-        self.worker_thread = threading.Thread(target=self.run_worker, daemon=True)
-        self.worker_thread.start()
+        self.analysis_process = self.mp_context.Process(
+            target=run_analysis_process,
+            args=(list(self.selected_paths), dict(self.case_info), self.output_queue),
+            daemon=True,
+        )
+        self.analysis_process.start()
         self.update_timer()
         self.process_output_queue()
 
@@ -631,18 +656,6 @@ class TorTraceGUI(ctk.CTk):
             self.status.set("Still working... large files can take longer")
         self.timer_after_id = self.after(1000, self.update_timer)
 
-    def run_worker(self):
-        try:
-            from main import run_analysis
-
-            def event_callback(event):
-                self.output_queue.put(event)
-
-            result = run_analysis(self.selected_paths, event_callback=event_callback, case_info=self.case_info)
-            self.output_queue.put({"type": "complete", "result": result})
-        except Exception as exc:
-            self.output_queue.put({"type": "worker_error", "message": str(exc), "traceback": traceback.format_exc()})
-
     def process_output_queue(self):
         processed = 0
         max_events_per_cycle = 20
@@ -653,8 +666,18 @@ class TorTraceGUI(ctk.CTk):
                 break
             self.handle_event(event)
             processed += 1
-        if self.analysis_running or not self.output_queue.empty():
-            self.queue_after_id = self.after(40 if not self.output_queue.empty() else 100, self.process_output_queue)
+        if self.analysis_running and self.analysis_process is not None and not self.analysis_process.is_alive():
+            if self.output_queue.empty():
+                self.handle_event(
+                    {
+                        "type": "worker_error",
+                        "message": "Analysis process stopped unexpectedly.",
+                        "traceback": "",
+                    }
+                )
+                return
+        if self.analysis_running or processed > 0:
+            self.queue_after_id = self.after(40 if processed >= max_events_per_cycle else 100, self.process_output_queue)
 
     def handle_event(self, event):
         event_type = event.get("type")
@@ -678,11 +701,24 @@ class TorTraceGUI(ctk.CTk):
             self.write("dashboard", message, "critical")
             return
         if event_type == "complete":
+            if self.analysis_process is not None:
+                try:
+                    self.analysis_process.join(timeout=0.2)
+                except Exception:
+                    pass
             self.apply_analysis_result(event.get("result", {}))
             return
         if event_type == "worker_error":
             self.analysis_running = False
             self._set_busy_state(False)
+            if self.analysis_process is not None:
+                try:
+                    if self.analysis_process.is_alive():
+                        self.analysis_process.terminate()
+                    self.analysis_process.join(timeout=0.2)
+                except Exception:
+                    pass
+            self.analysis_process = None
             self.status.set("FAILED")
             self.current_file.set("Current file: Analysis stopped")
             self.write("dashboard", event.get("message", "Worker error"), "critical")
@@ -694,6 +730,7 @@ class TorTraceGUI(ctk.CTk):
     def apply_analysis_result(self, result, persist_case=True):
         self.analysis_running = False
         self._set_busy_state(False)
+        self.analysis_process = None
         if not result:
             self.status.set("DONE")
             self.progress.set(1)
@@ -745,7 +782,6 @@ class TorTraceGUI(ctk.CTk):
         self.timer.set("Completed")
         self.current_file.set("Current file: Completed")
         self.tabview.set("DASHBOARD")
-        self.view_help.set("Analysis finished. Timeline Graph uses timeline-relevant artifact timestamps only. Evidence Pie shows detection counts by layer, and Relations shows which layer produced each artifact.")
 
     def render_dashboard(self, result):
         tab = self.tabs["dashboard"]
@@ -780,6 +816,11 @@ class TorTraceGUI(ctk.CTk):
         tab.insert(tk.END, f"Determination  : {self.determination or 'No determination generated'}\n", "high")
         if self.report_path:
             tab.insert(tk.END, f"Auto Report    : {self.report_path}\n", "muted")
+        tab.insert(tk.END, "\n", "normal")
+        tab.insert(tk.END, "Per-Layer Detections\n", "high")
+        for layer_name in ["memory", "system", "network", "application", "transport"]:
+            count = len(result.get("layer_results", {}).get(layer_name, []))
+            tab.insert(tk.END, f"- {layer_name.title():<11}: {count}\n", "normal" if count == 0 else "artifact")
         tab.insert(tk.END, "\n", "normal")
         tab.insert(tk.END, "========== CORRELATION FINDINGS ==========\n", "high")
         if self.correlation_items:
@@ -830,9 +871,7 @@ class TorTraceGUI(ctk.CTk):
             (f"EVIDENCE : {detection.get('evidence_match', 'N/A')}", "medium"),
             (f"NOTE     : {detection.get('message', 'No message')}", "normal"),
         ]
-        if layer == "Transport":
-            lines.append(("TIMELINE : Not shown for transport flow detections.", "muted"))
-        else:
+        if layer in {"System", "Application"}:
             lines.extend(
                 [
                     (f"MODIFIED : {timestamps.get('modified', 'N/A')}", "normal"),
@@ -950,25 +989,24 @@ class TorTraceGUI(ctk.CTk):
     def show_graph(self):
         filtered_events = self._get_filtered_timeline_events()
         if not filtered_events:
-            messagebox.showwarning("No Timeline Data", "No timeline-relevant artifact timestamps are available for the current case or filters.")
+            messagebox.showwarning("No Timeline Data", "No timeline events are available for the current case or filters.")
             return
         figure = build_timeline_figure({"events": filtered_events})
-        self._display_figure(figure, "Timeline Graph", "Basis: system/application artifact timestamps after the current timeline filters are applied. Each horizontal bar represents one reconstructed artifact event.")
+        self._display_figure(figure, "Timeline Graph")
 
     def show_pie_chart(self):
         if not self.all_detections:
             messagebox.showwarning("No Detection Data", "Run analysis first to generate detections.")
             return
         figure = build_detection_pie_figure(self.all_detections)
-        self._display_figure(figure, "Evidence Pie", "Basis: count of detections per forensic layer in the current case.")
+        self._display_figure(figure, "Evidence Pie")
 
     def show_timeline(self, activate_tab=True):
         tab = self.tabs["timeline"]
         tab.delete("1.0", tk.END)
         events = self._get_filtered_timeline_events()
         if not events:
-            tab.insert(tk.END, "No timeline events are available for the current filters.\n", "normal")
-            tab.insert(tk.END, "Timeline only uses system/application artifact timestamps. Network and transport detections are intentionally excluded.\n", "muted")
+            tab.insert(tk.END, "No timeline events are available.\n", "normal")
             return
         if activate_tab:
             self.tabview.set("TIMELINE")
@@ -984,8 +1022,6 @@ class TorTraceGUI(ctk.CTk):
         if not grouped:
             tab.insert(tk.END, "No timeline events match the current filters.\n", "normal")
             return
-
-        tab.insert(tk.END, "Timeline basis: reconstructed system/application artifact timestamps. Transport and network detections are excluded to avoid misleading upload/file-access times.\n\n", "muted")
 
         for time_value, layer, artifact in sorted(grouped, key=lambda item: self._parse_timeline_time(item[0][0]) or datetime.max):
             tab.insert(tk.END, f"{time_value} | {layer} | {artifact}\n", "artifact")
@@ -1012,24 +1048,7 @@ class TorTraceGUI(ctk.CTk):
             messagebox.showwarning("No Detections", "Run analysis first to generate artifact relationships.")
             return
         figure = build_relationship_figure(self.all_detections)
-        self._display_figure(figure, "Relations Map", "Basis: each green artifact node is connected to the blue forensic layer that detected it.")
-
-    def show_view_guide(self):
-        message = (
-            "Timeline Graph:\n"
-            "- Basis: system/application artifact timestamps only.\n"
-            "- Network and transport detections are excluded to avoid misleading upload or file-access times.\n"
-            "- X-axis = artifact timestamp. Each horizontal bar is one reconstructed event.\n\n"
-            "Evidence Pie:\n"
-            "- Basis: number of detections produced by each forensic layer in the current case.\n\n"
-            "Relations:\n"
-            "- Basis: which forensic layer produced which detected artifact.\n\n"
-            "Timeline filters:\n"
-            "- Start date and end date filter the TIMELINE tab and Timeline Graph.\n"
-            "- Recent Focus keeps only the most recent timeline events visible.\n"
-            "- They do not change the underlying forensic scan."
-        )
-        messagebox.showinfo("How To Read The Views", message)
+        self._display_figure(figure, "Relations Map")
 
     def export(self):
         from report_generator import export_custom_report
@@ -1082,5 +1101,7 @@ class TorTraceGUI(ctk.CTk):
 
 
 if __name__ == "__main__":
+    mp.freeze_support()
     app = TorTraceGUI()
     app.mainloop()
+

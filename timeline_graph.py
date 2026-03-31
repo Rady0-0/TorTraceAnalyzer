@@ -36,9 +36,9 @@ def build_timeline_figure(timeline_data):
         if not event_time:
             continue
         artifact = event.get("artifact", "Unknown")
-        label = f"{event.get('layer', 'Unknown')}: {artifact}"
-        if len(label) > 52:
-            label = label[:49] + "..."
+        label = f"{event.get('layer', 'Unknown')} | {artifact}"
+        if len(label) > 58:
+            label = label[:55] + "..."
         parsed.append(
             {
                 "time": event_time,
@@ -59,7 +59,8 @@ def build_timeline_figure(timeline_data):
             labels.append(event["label"])
     label_positions = {label: index for index, label in enumerate(labels)}
 
-    figure, axis = plt.subplots(figsize=(11.8, 4.9))
+    figure_height = min(max(4.8, len(labels) * 0.42), 9.2)
+    figure, axis = plt.subplots(figsize=(11.8, figure_height))
     figure.patch.set_facecolor("#111827")
     axis.set_facecolor("#111827")
 
@@ -83,10 +84,14 @@ def build_timeline_figure(timeline_data):
             edgecolor="none",
         )
 
+    for index in range(len(labels)):
+        if index % 2 == 0:
+            axis.axhspan(index - 0.5, index + 0.5, color="#162033", alpha=0.22, zorder=0)
+
     axis.set_yticks(list(label_positions.values()))
     axis.set_yticklabels(list(label_positions.keys()))
     axis.set_xlabel("Artifact Timestamp")
-    axis.set_title("Artifact Timeline (Horizontal Event Bars)")
+    axis.set_title("Artifact Timeline")
     axis.grid(True, axis="x", linestyle="--", linewidth=0.4, alpha=0.28)
     axis.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=4, maxticks=8))
     axis.xaxis.set_major_formatter(mdates.DateFormatter("%Y-%m-%d\n%H:%M"))
