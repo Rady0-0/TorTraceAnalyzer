@@ -327,7 +327,7 @@ class TorTraceGUI(ctk.CTk):
         table.heading("artifact", text="Artifact")
         table.heading("status", text="Status")
         table.heading("evidence", text="Evidence")
-        table.heading("path", text="Path")
+        table.heading("path", text=self._layer_location_heading(layer_key))
         table.column("artifact", width=230, anchor="w")
         table.column("status", width=100, anchor="center")
         table.column("evidence", width=220, anchor="w")
@@ -466,12 +466,28 @@ class TorTraceGUI(ctk.CTk):
             return "critical"
         return "detected"
 
+    def _layer_location_heading(self, layer_key):
+        if str(layer_key).strip().lower() == "transport":
+            return "Data Exchange"
+        return "Path"
+
+    def _layer_location_text(self, layer_key, detection):
+        raw_value = str(detection.get("file_path", "N/A"))
+        if str(layer_key).strip().lower() != "transport":
+            return raw_value
+        if "->" in raw_value:
+            return raw_value.replace(" -> ", " <-> ")
+        if raw_value.lower().endswith((".pcap", ".pcapng")):
+            return "Capture-wide Tor flow summary"
+        return raw_value
+
     def _layer_row_values(self, detection):
+        layer_key = str(detection.get("layer", "")).strip().lower()
         return (
             detection.get("file_name", "UNKNOWN"),
             detection.get("status", "Detected"),
             detection.get("evidence_match", "N/A"),
-            detection.get("file_path", "N/A"),
+            self._layer_location_text(layer_key, detection),
         )
 
     def _layer_search_text(self, detection):
@@ -529,7 +545,7 @@ class TorTraceGUI(ctk.CTk):
             f"Artifact : {detection.get('file_name', 'UNKNOWN')}",
             f"Status   : {detection.get('status', 'Detected')}",
             f"Layer    : {detection.get('layer', layer_key.title())}",
-            f"Path     : {detection.get('file_path', 'N/A')}",
+            f"{self._layer_location_heading(layer_key):<9}: {self._layer_location_text(layer_key, detection)}",
             f"Evidence : {detection.get('evidence_match', 'N/A')}",
             f"Message  : {detection.get('message', 'N/A')}",
         ]
