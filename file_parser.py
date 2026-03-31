@@ -6,6 +6,47 @@ import pandas as pd
 from docx import Document
 
 
+MAX_TEXT_BYTES = 5 * 1024 * 1024
+MAX_TEXT_CHARS = 1_500_000
+MAX_EXCEL_ROWS = 350
+MAX_DOCX_PARAGRAPHS = 600
+
+
+def read_text_safely(filepath, strip_html=False):
+    size_bytes = os.path.getsize(filepath)
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        content = f.read(min(size_bytes, MAX_TEXT_BYTES))
+
+    if strip_html:
+        content = re.sub(r"<[^>]*>", " ", content)
+
+    if size_bytes > MAX_TEXT_BYTES:
+        content += "\n[TRUNCATED LARGE TEXT FILE]"
+
+    return content[:MAX_TEXT_CHARS]
+
+
+def read_json_safely(filepath):
+    size_bytes = os.path.getsize(filepath)
+    if size_bytes > MAX_TEXT_BYTES:
+        return read_text_safely(filepath)
+
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
+        return json.dumps(json.load(f), indent=2)[:MAX_TEXT_CHARS]
+
+
+def read_excel_safely(filepath):
+    return pd.read_excel(filepath, nrows=MAX_EXCEL_ROWS).to_string()[:MAX_TEXT_CHARS]
+
+
+def read_docx_safely(filepath):
+    paragraphs = [p.text for p in Document(filepath).paragraphs[:MAX_DOCX_PARAGRAPHS]]
+    content = "\n".join(paragraphs)
+    if len(paragraphs) >= MAX_DOCX_PARAGRAPHS:
+        content += "\n[TRUNCATED LARGE DOCX FILE]"
+    return content[:MAX_TEXT_CHARS]
+
+
 # ============================================
 # 🔥 SAFE BINARY STRING EXTRACTOR
 # ============================================
@@ -49,29 +90,25 @@ def parse_forensic_file(filepath):
         # 1. HTML
         # ============================================
         if ext in [".html", ".htm"]:
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                raw_html = f.read()
-                content = re.sub(r'<[^>]*>', ' ', raw_html)
+            content = read_text_safely(filepath, strip_html=True)
 
         # ============================================
         # 2. TEXT FILES
         # ============================================
         elif ext in [".txt", ".log", ".csv"]:
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read()
+            content = read_text_safely(filepath)
 
         # ============================================
         # 3. STRUCTURED FILES
         # ============================================
         elif ext == ".json":
-            with open(filepath, 'r', encoding='utf-8', errors='ignore') as f:
-                content = json.dumps(json.load(f), indent=2)
+            content = read_json_safely(filepath)
 
         elif ext in [".xlsx", ".xls"]:
-            content = pd.read_excel(filepath).to_string()
+            content = read_excel_safely(filepath)
 
         elif ext == ".docx":
-            content = "\n".join([p.text for p in Document(filepath).paragraphs])
+            content = read_docx_safely(filepath)
 
         # ============================================
         # 🔥 4. MEMORY / RAW BINARIES (SAFE)

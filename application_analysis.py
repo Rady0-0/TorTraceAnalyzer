@@ -10,7 +10,7 @@ def extract_internal_metadata(content, default_ts, artifact_name):
     time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
     times = re.findall(time_pattern, window)
     
-    path_pattern = r'([a-zA-Z]:\\[\\\w\s\.\-\(\)]+|/[\w\s\.\-\(\)/]+)'
+    path_pattern = r'([a-zA-Z]:\\[\\\w \.\-\(\)]+|/[\w \.\-\(\)/]+)'
     paths = re.findall(path_pattern, window)
     
     raw_path = paths[0] if paths else "Path not found"

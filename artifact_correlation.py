@@ -3,6 +3,10 @@ def _extract_name(detection):
     return str(name).upper()
 
 
+def _item(severity, title, explanation):
+    return f"{severity} | {title} | {explanation}"
+
+
 def correlate_artifacts(layer_hits, all_detections):
     correlations = []
     names = [_extract_name(detection) for detection in all_detections]
@@ -31,48 +35,146 @@ def correlate_artifacts(layer_hits, all_detections):
     has_exfiltration = any("EXFILTRATION" in name for name in names)
 
     if has_execution:
-        correlations.append("HIGH: Tor execution confirmed via system-level artifacts.")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Tor execution evidence",
+                "System or memory artifacts suggest Tor was executed on the device.",
+            )
+        )
 
     if has_direct_tor:
-        correlations.append("CRITICAL: Direct Tor indicators detected (known ports or onion services).")
+        correlations.append(
+            _item(
+                "CRITICAL",
+                "Direct Tor indicators",
+                "Known Tor ports or onion-service references were detected in the evidence.",
+            )
+        )
 
     if has_pcap_tor:
-        correlations.append("CRITICAL: Packet-level analysis confirms Tor communication.")
+        correlations.append(
+            _item(
+                "CRITICAL",
+                "Packet-level Tor confirmation",
+                "PCAP analysis showed traffic using Tor-related network behavior or ports.",
+            )
+        )
 
     if has_behavioral and not has_direct_tor:
-        correlations.append("HIGH: Tor-like network behavior observed.")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Tor-like network behavior",
+                "The network pattern looks consistent with Tor-style routing, even without a direct Tor port hit.",
+            )
+        )
 
     if has_pcap_behavior:
-        correlations.append("HIGH: Multi-node encrypted traffic pattern consistent with Tor routing.")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Multi-node encrypted pattern",
+                "Encrypted traffic was spread across many nodes, which is consistent with anonymized routing.",
+            )
+        )
 
     if has_vpn and (has_execution or has_behavioral or has_pcap_tor):
-        correlations.append("HIGH: Layered anonymization detected (VPN + Tor activity).")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Layered anonymization",
+                "VPN evidence appeared together with Tor-related activity, suggesting stacked privacy tooling.",
+            )
+        )
     elif has_vpn:
-        correlations.append("MEDIUM: VPN usage detected. Traffic may be concealed.")
+        correlations.append(
+            _item(
+                "MEDIUM",
+                "VPN activity",
+                "VPN-related evidence was found, which may hide or redirect traffic.",
+            )
+        )
 
     if has_transport:
-        correlations.append("MEDIUM: Active transport-layer data transfer detected.")
+        correlations.append(
+            _item(
+                "MEDIUM",
+                "Transport activity",
+                "The transport layer showed active data movement or encrypted transfer.",
+            )
+        )
 
     if has_execution and (has_transport or has_pcap_tor):
-        correlations.append("CRITICAL: Data transfer likely occurred through Tor (execution + transport correlation).")
+        correlations.append(
+            _item(
+                "CRITICAL",
+                "Execution plus transfer evidence",
+                "Tor execution evidence appeared together with transport or packet-transfer evidence in the same case.",
+            )
+        )
     elif has_behavioral and (has_transport or has_pcap_behavior):
-        correlations.append("HIGH: Transport behavior aligns with Tor-like encrypted routing.")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Network pattern plus transfer evidence",
+                "Transport evidence supports the Tor-like routing pattern seen elsewhere in the case.",
+            )
+        )
 
     if has_exfiltration:
-        correlations.append("CRITICAL: Potential data exfiltration detected.")
+        correlations.append(
+            _item(
+                "CRITICAL",
+                "Potential exfiltration",
+                "The evidence indicates possible outbound data removal or exfiltration behavior.",
+            )
+        )
 
     active_layers = sum(bool(layer_hits.get(layer)) for layer in layer_hits)
     if active_layers >= 4:
-        correlations.append("CRITICAL: Evidence spans multiple forensic layers.")
+        correlations.append(
+            _item(
+                "CRITICAL",
+                "Cross-layer support",
+                "Detections were found across four or more forensic layers, which strengthens confidence.",
+            )
+        )
     elif active_layers >= 3:
-        correlations.append("HIGH: Strong multi-layer forensic correlation.")
+        correlations.append(
+            _item(
+                "HIGH",
+                "Multi-layer support",
+                "Detections were found across three forensic layers, giving stronger support than a single-source hit.",
+            )
+        )
     elif active_layers == 2:
-        correlations.append("MEDIUM: Limited cross-layer evidence.")
+        correlations.append(
+            _item(
+                "MEDIUM",
+                "Limited cross-layer support",
+                "Two forensic layers contributed detections, but the case is not yet broadly corroborated.",
+            )
+        )
 
     if not correlations:
-        correlations.append("LOW: No strong indicators of Tor usage detected.")
+        correlations.append(
+            _item(
+                "LOW",
+                "Weak correlation",
+                "No strong combination of Tor-related indicators was found across the analyzed evidence.",
+            )
+        )
+
+    summary_items = []
+    for item in correlations:
+        parts = [part.strip() for part in item.split("|", 2)]
+        if len(parts) == 3:
+            summary_items.append(f"{parts[0]} - {parts[1]}")
+        else:
+            summary_items.append(item)
 
     return {
         "correlations": correlations,
-        "summary": " | ".join(correlations),
+        "summary": "; ".join(summary_items),
     }

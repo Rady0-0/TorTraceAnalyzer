@@ -10,7 +10,7 @@ def extract_internal_metadata(content, default_ts, artifact_name):
     time_pattern = r'(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})'
     times = re.findall(time_pattern, window)
     
-    path_pattern = r'([a-zA-Z]:\\[\\\w\s\.\-\(\)]+|/[\w\s\.\-\(\)/]+)'
+    path_pattern = r'([a-zA-Z]:\\[\\\w \.\-\(\)]+|/[\w \.\-\(\)/]+)'
     paths = re.findall(path_pattern, window)
     
     raw_path = "Path not found"
@@ -52,7 +52,7 @@ def is_valid_tor_prefetch(pf_name):
 
 # 🔥 PATH VALIDATION (IMPORTANT)
 def is_valid_prefetch_path(path):
-    path = path.lower()
+    path = path.lower().replace("\\", "/")
 
     if "windows/prefetch" not in path:
         return False

@@ -50,6 +50,16 @@ def _normalize_visual_paths(visual_paths=None, graph_path=None):
     return visuals
 
 
+def _format_correlation_item(item):
+    parts = [part.strip() for part in str(item).split("|", 2)]
+    if len(parts) == 3:
+        return parts[0], parts[1], parts[2]
+    text = str(item).strip()
+    severity = text.split(":", 1)[0].strip() if ":" in text else "INFO"
+    explanation = text.split(":", 1)[1].strip() if ":" in text else text
+    return severity, "Correlation finding", explanation
+
+
 def generate_report(
     all_detections,
     fci_score,
@@ -96,11 +106,16 @@ def generate_report(
             report_file.write("CORRELATION FINDINGS\n")
             report_file.write("-" * 100 + "\n")
             for item in correlation_items:
-                report_file.write(f"- {item}\n")
+                severity, title, explanation = _format_correlation_item(item)
+                report_file.write(f"[{severity}] {title}\n")
+                report_file.write(f"  {explanation}\n")
             report_file.write("\n")
 
         report_file.write("TIMELINE\n")
         report_file.write("-" * 100 + "\n")
+        summary = timeline_data.get("summary")
+        if summary:
+            report_file.write(summary + "\n")
         for event in timeline_data.get("events", []):
             report_file.write(
                 f"{event.get('time')} | {event.get('layer')} | {event.get('artifact')} | {event.get('type')}\n"
@@ -173,12 +188,17 @@ def export_pdf_report(
         elements.append(Paragraph("<b>Correlation Findings</b>", styles["Heading2"]))
         elements.append(Spacer(1, 8))
         for item in correlation_items:
-            elements.append(Paragraph(f"- {item}", styles["Normal"]))
+            severity, title, explanation = _format_correlation_item(item)
+            elements.append(Paragraph(f"[{severity}] {title}", styles["Normal"]))
+            elements.append(Paragraph(explanation, styles["Normal"]))
         elements.append(Spacer(1, 12))
 
     elements.append(Paragraph("<b>Timeline</b>", styles["Heading2"]))
     elements.append(Spacer(1, 8))
     events = timeline_data.get("events", [])
+    if timeline_data.get("summary"):
+        elements.append(Paragraph(timeline_data.get("summary"), styles["Normal"]))
+        elements.append(Spacer(1, 6))
     if not events:
         elements.append(Paragraph("No timeline data available.", styles["Normal"]))
     else:

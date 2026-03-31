@@ -13,57 +13,68 @@ def safe_parse(timestamp):
     return None
 
 
+TIMELINE_LAYERS = {"System", "Application"}
+GENERIC_PATH_PREFIXES = (
+    "memory ",
+    "network ",
+    "packet stream",
+    "transport layer",
+    "tls/https channel",
+    "tor transport channel",
+    "multiple external nodes",
+)
+
+
+def _timeline_relevant_detection(detection):
+    layer = str(detection.get("layer", "")).title()
+    if layer not in TIMELINE_LAYERS:
+        return False
+
+    file_path = str(detection.get("file_path", "")).strip().lower()
+    if not file_path:
+        return False
+
+    if file_path.startswith(GENERIC_PATH_PREFIXES):
+        return False
+
+    return True
+
+
 def build_timeline(all_detections):
     events = []
     seen = set()
 
     for detection in all_detections:
+        if not _timeline_relevant_detection(detection):
+            continue
+
         timestamps = detection.get("disk_timestamps", {})
         layer = detection.get("layer", "UNKNOWN")
         artifact = detection.get("file_name") or detection.get("artifact") or "UNKNOWN"
+        modified_value = timestamps.get("modified")
+        if not safe_parse(modified_value):
+            continue
 
-        for event_type, key in (
-            ("MODIFIED", "modified"),
-            ("CREATED", "created"),
-            ("ACCESSED", "accessed"),
-        ):
-            time_value = timestamps.get(key)
-            if not safe_parse(time_value):
-                continue
-
-            event_key = (time_value, event_type, layer, artifact)
-            if event_key in seen:
-                continue
-            seen.add(event_key)
-            events.append(
-                {
-                    "time": time_value,
-                    "type": event_type,
-                    "layer": layer,
-                    "artifact": artifact,
-                }
-            )
-
-        modified_dt = safe_parse(timestamps.get("modified"))
-        created_dt = safe_parse(timestamps.get("created"))
-        if modified_dt and created_dt and created_dt > modified_dt:
-            anomaly_key = (timestamps.get("created"), "ANOMALY", layer, artifact)
-            if anomaly_key not in seen:
-                seen.add(anomaly_key)
-                events.append(
-                    {
-                        "time": timestamps.get("created"),
-                        "type": "ANOMALY",
-                        "layer": layer,
-                        "artifact": artifact,
-                        "note": "Possible timestomping (created > modified)",
-                    }
-                )
+        event_key = (modified_value, "MODIFIED", layer, artifact)
+        if event_key in seen:
+            continue
+        seen.add(event_key)
+        events.append(
+            {
+                "time": modified_value,
+                "type": "MODIFIED",
+                "layer": layer,
+                "artifact": artifact,
+            }
+        )
 
     events = [event for event in events if safe_parse(event.get("time"))]
     events.sort(key=lambda event: (safe_parse(event["time"]), event["layer"], event["artifact"], event["type"]))
 
     return {
         "events": events,
-        "summary": f"{len(events)} timeline events reconstructed (MACB format).",
+        "summary": (
+            f"{len(events)} timeline events reconstructed from system/application artifact timestamps. "
+            "Network and transport detections are excluded to avoid misleading file-upload times."
+        ),
     }
