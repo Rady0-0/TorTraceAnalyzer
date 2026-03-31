@@ -125,7 +125,7 @@ class TorTraceGUI(ctk.CTk):
         }
 
     def _set_window_icon(self):
-        icon_path = resource_path(os.path.join("assets", "tortrace_icon.ico"))
+        icon_path = resource_path(os.path.join("assets", "tortrace_icon_v2.ico"))
         if os.path.exists(icon_path):
             try:
                 self.iconbitmap(icon_path)
@@ -133,7 +133,7 @@ class TorTraceGUI(ctk.CTk):
                 pass
 
     def _load_logo(self, size):
-        logo_path = resource_path(os.path.join("assets", "tortrace_logo.png"))
+        logo_path = resource_path(os.path.join("assets", "tortrace_logo_v2.png"))
         if not os.path.exists(logo_path):
             return None
         try:

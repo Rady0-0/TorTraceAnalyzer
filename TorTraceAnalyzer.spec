@@ -7,8 +7,8 @@ datas = []
 datas += collect_data_files("customtkinter")
 datas += collect_data_files("scapy")
 datas += [
-    ("assets\\tortrace_icon.ico", "assets"),
-    ("assets\\tortrace_logo.png", "assets"),
+    ("assets\\tortrace_icon_v2.ico", "assets"),
+    ("assets\\tortrace_logo_v2.png", "assets"),
 ]
 
 hiddenimports = [
@@ -65,5 +65,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="assets\\tortrace_icon.ico",
+    icon="assets\\tortrace_icon_v2.ico",
 )
