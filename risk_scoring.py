@@ -10,7 +10,7 @@ def calculate_fci(layer_hits, all_detections):
     application_hits = sum(
         1
         for name in names
-        if any(indicator in name for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT"))
+        if any(indicator in name for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT", "TOR BROWSER SHORTCUT"))
     )
 
     if any("TOR COMMUNICATION CONFIRMED" in name for name in names):

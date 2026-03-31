@@ -65,6 +65,7 @@ def check_application(file_data):
         "cookies.sqlite": "Session Data: Evidence of Tor browsing sessions.",
         "noscript": "Security Policy: Indicates Tor Browser hardened mode.",
         "torrc": "Core Config: Defines Tor network behavior and routing.",
+        "tor browser.lnk": "Shortcut artifact indicates Tor Browser presence in the user profile.",
     }
 
     tor_path_hints = [
@@ -92,7 +93,7 @@ def check_application(file_data):
         path_lower = ext["path"].lower()
         context_lower = window.lower()
 
-        if any(excl in path_lower for excl in excluded_paths):
+        if artifact != "tor browser.lnk" and any(excl in path_lower for excl in excluded_paths):
             continue
 
         if not any(hint in path_lower or hint in context_lower for hint in tor_path_hints):
@@ -105,7 +106,7 @@ def check_application(file_data):
             {
                 "layer": "Application",
                 "status": "Detected",
-                "file_name": artifact.upper(),
+                "file_name": "TOR BROWSER SHORTCUT" if artifact == "tor browser.lnk" else artifact.upper(),
                 "file_path": ext["path"],
                 "message": reason,
                 "evidence_match": f"Application Anchor: {evidence_match}",

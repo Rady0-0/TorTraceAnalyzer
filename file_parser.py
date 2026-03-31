@@ -10,18 +10,72 @@ MAX_TEXT_BYTES = 5 * 1024 * 1024
 MAX_TEXT_CHARS = 1_500_000
 MAX_EXCEL_ROWS = 350
 MAX_DOCX_PARAGRAPHS = 600
+LARGE_TEXT_HEADER_LINES = 60
+LARGE_TEXT_MAX_MATCHED_LINES = 1200
+LARGE_TEXT_RELEVANT_KEYWORDS = [
+    "tor browser.lnk",
+    "tor browser",
+    "torbrowser",
+    "tor.exe",
+    "firefox.exe",
+    "places.sqlite",
+    "cookies.sqlite",
+    "torrc",
+    "noscript",
+    "usbstor",
+    ".onion",
+    "wireguard",
+    "openvpn",
+    "port 9050",
+    "port 9150",
+    "port 9001",
+    "port 9030",
+    ":9050",
+    ":9150",
+    ":9001",
+    ":9030",
+]
+
+
+def extract_relevant_lines_from_large_text(filepath, strip_html=False):
+    header_lines = []
+    relevant_lines = []
+    seen_lines = set()
+
+    with open(filepath, "r", encoding="utf-8", errors="ignore") as file_obj:
+        for line_number, raw_line in enumerate(file_obj):
+            line = raw_line.rstrip("\n")
+
+            if strip_html:
+                line = re.sub(r"<[^>]*>", " ", line)
+
+            if line_number < LARGE_TEXT_HEADER_LINES:
+                header_lines.append(line)
+
+            line_lower = line.lower()
+            if any(keyword in line_lower for keyword in LARGE_TEXT_RELEVANT_KEYWORDS):
+                normalized = line.strip()
+                if normalized and normalized not in seen_lines:
+                    seen_lines.add(normalized)
+                    relevant_lines.append(normalized)
+                    if len(relevant_lines) >= LARGE_TEXT_MAX_MATCHED_LINES:
+                        break
+
+    combined = header_lines + [""] + relevant_lines
+    combined.append("[TRUNCATED LARGE TEXT FILE - RELEVANT LINES EXTRACTED]")
+    return "\n".join(combined)[:MAX_TEXT_CHARS]
 
 
 def read_text_safely(filepath, strip_html=False):
     size_bytes = os.path.getsize(filepath)
+    if size_bytes > MAX_TEXT_BYTES:
+        return extract_relevant_lines_from_large_text(filepath, strip_html=strip_html)
+
     with open(filepath, "r", encoding="utf-8", errors="ignore") as f:
-        content = f.read(min(size_bytes, MAX_TEXT_BYTES))
+        content = f.read(size_bytes)
 
     if strip_html:
         content = re.sub(r"<[^>]*>", " ", content)
-
-    if size_bytes > MAX_TEXT_BYTES:
-        content += "\n[TRUNCATED LARGE TEXT FILE]"
 
     return content[:MAX_TEXT_CHARS]
 

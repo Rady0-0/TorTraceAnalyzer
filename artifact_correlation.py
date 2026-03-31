@@ -28,7 +28,7 @@ def correlate_artifacts(layer_hits, all_detections):
     has_application = any(
         indicator in name
         for name in names
-        for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT")
+        for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT", "TOR BROWSER SHORTCUT")
     )
     has_vpn = any("VPN" in name for name in names)
     has_transport = any(
