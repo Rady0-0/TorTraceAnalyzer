@@ -23,11 +23,16 @@ GENERIC_PATH_PREFIXES = (
     "tor transport channel",
     "multiple external nodes",
 )
+CONTEXT_ONLY_ARTIFACTS = {"REMOVABLE STORAGE"}
 
 
 def _timeline_relevant_detection(detection):
     layer = str(detection.get("layer", "")).title()
     if layer not in TIMELINE_LAYERS:
+        return False
+
+    artifact = str(detection.get("file_name") or detection.get("artifact") or "").strip().upper()
+    if artifact in CONTEXT_ONLY_ARTIFACTS:
         return False
 
     file_path = str(detection.get("file_path", "")).strip().lower()

@@ -149,7 +149,7 @@ def check_system(file_data):
             "status": "Detected",
             "file_name": "REMOVABLE STORAGE",
             "file_path": ext["path"],
-            "message": "USB device usage detected (possible portable Tor usage).",
+            "message": "USB removable storage activity detected. This artifact is contextual and not Tor-specific.",
             "evidence_match": "USBSTOR",
             "disk_timestamps": ext["timestamps"],
         })

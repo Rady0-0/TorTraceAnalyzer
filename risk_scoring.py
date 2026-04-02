@@ -49,9 +49,6 @@ def calculate_fci(layer_hits, all_detections):
     if any("VPN" in name for name in names):
         total_score += 10
 
-    if any("REMOVABLE STORAGE" in name for name in names):
-        total_score += 10
-
     if any("EVENT LOG CLEARED" in name or "EVENT 1102" in name for name in names):
         total_score += 10
 
