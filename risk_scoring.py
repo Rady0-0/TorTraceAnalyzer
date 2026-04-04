@@ -1,31 +1,40 @@
-def _extract_name(detection):
-    name = detection.get("file_name") or detection.get("artifact") or ""
-    return str(name).upper()
+def _extract_signal_text(detection):
+    parts = [
+        detection.get("file_name"),
+        detection.get("artifact"),
+        detection.get("evidence_match"),
+        detection.get("message"),
+        detection.get("file_path"),
+    ]
+    return " | ".join(str(part).upper() for part in parts if part)
 
 
 def calculate_fci(layer_hits, all_detections):
     total_score = 0
     max_score = 100
-    names = [_extract_name(detection) for detection in all_detections]
+    signals = [_extract_signal_text(detection) for detection in all_detections]
     application_hits = sum(
         1
-        for name in names
-        if any(indicator in name for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT", "TOR BROWSER SHORTCUT"))
+        for signal in signals
+        if any(
+            indicator in signal
+            for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT", "TOR BROWSER SHORTCUT")
+        )
     )
 
-    if any("TOR COMMUNICATION CONFIRMED" in name for name in names):
+    if any("TOR COMMUNICATION CONFIRMED" in signal for signal in signals):
         total_score += 40
 
-    if any(".ONION" in name for name in names):
+    if any(".ONION" in signal for signal in signals):
         total_score += 40
 
-    if any("PORT 9050" in name or "PORT 9150" in name for name in names):
+    if any("PORT 9050" in signal or "PORT 9150" in signal for signal in signals):
         total_score += 30
 
-    if any("TOR EXECUTION" in name or "PREFETCH" in name for name in names):
+    if any("TOR EXECUTION" in signal or "PREFETCH" in signal for signal in signals):
         total_score += 30
 
-    if any("TOR PROCESS" in name or "TOR BROWSER" in name for name in names):
+    if any("TOR PROCESS" in signal or "TOR BROWSER" in signal for signal in signals):
         total_score += 30
 
     if application_hits >= 2:
@@ -33,28 +42,28 @@ def calculate_fci(layer_hits, all_detections):
     elif application_hits == 1:
         total_score += 18
 
-    if any("POSSIBLE TOR TRAFFIC" in name or "TOR-LIKE" in name for name in names):
+    if any("POSSIBLE TOR TRAFFIC" in signal or "TOR-LIKE" in signal for signal in signals):
         total_score += 20
 
-    if any("TOR DATA FLOW" in name for name in names):
+    if any("TOR DATA FLOW" in signal for signal in signals):
         total_score += 25
-    elif any("ENCRYPTED DATA FLOW" in name or "ENCRYPTED TRANSPORT" in name for name in names):
+    elif any("ENCRYPTED DATA FLOW" in signal or "ENCRYPTED TRANSPORT" in signal for signal in signals):
         total_score += 15
-    elif any("DATA FLOW" in name for name in names):
+    elif any("DATA FLOW" in signal for signal in signals):
         total_score += 10
 
-    if any("TOR-LIKE MULTI-NODE TRAFFIC" in name for name in names):
+    if any("TOR-LIKE MULTI-NODE TRAFFIC" in signal for signal in signals):
         total_score += 20
 
-    if any("VPN" in name for name in names):
+    if any("VPN" in signal for signal in signals):
         total_score += 10
 
-    if any("EVENT LOG CLEARED" in name or "EVENT 1102" in name for name in names):
+    if any("EVENT LOG CLEARED" in signal or "EVENT 1102" in signal for signal in signals):
         total_score += 10
 
-    has_execution = any("PREFETCH" in name or "TOR EXECUTION" in name for name in names)
-    has_transport = any("DATA FLOW" in name for name in names)
-    has_pcap = any("TOR COMMUNICATION CONFIRMED" in name for name in names)
+    has_execution = any("PREFETCH" in signal or "TOR EXECUTION" in signal for signal in signals)
+    has_transport = any("DATA FLOW" in signal for signal in signals)
+    has_pcap = any("TOR COMMUNICATION CONFIRMED" in signal for signal in signals)
 
     if has_execution and has_transport:
         total_score += 15

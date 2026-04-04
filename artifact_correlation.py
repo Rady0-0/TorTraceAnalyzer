@@ -1,6 +1,12 @@
-def _extract_name(detection):
-    name = detection.get("file_name") or detection.get("artifact") or ""
-    return str(name).upper()
+def _extract_signal_text(detection):
+    parts = [
+        detection.get("file_name"),
+        detection.get("artifact"),
+        detection.get("evidence_match"),
+        detection.get("message"),
+        detection.get("file_path"),
+    ]
+    return " | ".join(str(part).upper() for part in parts if part)
 
 
 def _item(severity, title, explanation):
@@ -9,35 +15,35 @@ def _item(severity, title, explanation):
 
 def correlate_artifacts(layer_hits, all_detections):
     correlations = []
-    names = [_extract_name(detection) for detection in all_detections]
+    signals = [_extract_signal_text(detection) for detection in all_detections]
 
     has_execution = any(
-        "PREFETCH" in name or "TOR PROCESS" in name or "TOR EXECUTION" in name
-        for name in names
+        "PREFETCH" in signal or "TOR PROCESS" in signal or "TOR EXECUTION" in signal
+        for signal in signals
     )
     has_direct_tor = any(
-        any(port in name for port in ("PORT 9001", "PORT 9030", "PORT 9050", "PORT 9150"))
-        or ".ONION" in name
-        or "TOR COMMUNICATION CONFIRMED" in name
-        for name in names
+        any(port in signal for port in ("PORT 9001", "PORT 9030", "PORT 9050", "PORT 9150"))
+        or ".ONION" in signal
+        or "TOR COMMUNICATION CONFIRMED" in signal
+        for signal in signals
     )
     has_behavioral = any(
-        "POSSIBLE TOR" in name or "TOR-LIKE" in name
-        for name in names
+        "POSSIBLE TOR" in signal or "TOR-LIKE" in signal
+        for signal in signals
     )
     has_application = any(
-        indicator in name
-        for name in names
+        indicator in signal
+        for signal in signals
         for indicator in ("PLACES.SQLITE", "COOKIES.SQLITE", "TORRC", "NOSCRIPT", "TOR BROWSER SHORTCUT")
     )
-    has_vpn = any("VPN" in name for name in names)
+    has_vpn = any("VPN" in signal for signal in signals)
     has_transport = any(
-        "DATA FLOW" in name or "ENCRYPTED TRANSPORT" in name or "TCP DATA FLOW" in name
-        for name in names
+        "DATA FLOW" in signal or "ENCRYPTED TRANSPORT" in signal or "TCP DATA FLOW" in signal
+        for signal in signals
     )
-    has_pcap_tor = any("TOR COMMUNICATION CONFIRMED" in name for name in names)
-    has_pcap_behavior = any("TOR-LIKE MULTI-NODE TRAFFIC" in name for name in names)
-    has_exfiltration = any("EXFILTRATION" in name for name in names)
+    has_pcap_tor = any("TOR COMMUNICATION CONFIRMED" in signal for signal in signals)
+    has_pcap_behavior = any("TOR-LIKE MULTI-NODE TRAFFIC" in signal for signal in signals)
+    has_exfiltration = any("EXFILTRATION" in signal for signal in signals)
 
     if has_execution:
         correlations.append(
